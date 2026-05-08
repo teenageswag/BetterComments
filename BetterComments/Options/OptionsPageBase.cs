@@ -1,72 +1,49 @@
-﻿using Microsoft.VisualStudio.Shell;
+﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+
+using Microsoft.VisualStudio.Shell;
 using System;
 using System.ComponentModel;
-using System.Globalization;
-using System.Media;
 using System.Windows;
 
 namespace BetterComments.Options
 {
-   public abstract class OptionsPageBase : UIElementDialogPage
-   {
-      protected bool TokensValidated { get; private set; }
+    /// <summary>
+    /// Base class for Better Comments options pages.  Handles saving/reloading settings when
+    /// the user applies or cancels the Options dialog.
+    /// </summary>
+    public abstract class OptionsPageBase : UIElementDialogPage
+    {
+        private bool applied;
 
-      protected override UIElement Child { get; }
+        /// <inheritdoc/>
+        protected override abstract UIElement Child { get; }
 
-      protected override void OnActivate(CancelEventArgs e)
-      {
-         TokensValidated = false;
-         base.OnActivate(e);
-      }
+        /// <inheritdoc/>
+        protected override void OnActivate(CancelEventArgs e)
+        {
+            applied = false;
+            base.OnActivate(e);
+        }
 
-      protected override void OnApply(PageApplyEventArgs e)
-      {
-         TokensValidated = ValidateTokens();
-
-         if (TokensValidated)
-         {
+        /// <inheritdoc/>
+        protected override void OnApply(PageApplyEventArgs e)
+        {
+            applied = true;
             e.ApplyBehavior = ApplyKind.Apply;
-         }
-         else
-         {
-            e.ApplyBehavior = ApplyKind.CancelNoNavigate;
-            ShowInvalidTokenMessage();
-         }
+            base.OnApply(e);
+        }
 
-         base.OnApply(e);
-      }
+        /// <inheritdoc/>
+        protected override void OnClosed(EventArgs e)
+        {
+            if (applied)
+                SettingsStore.SaveSettings(BetterCommentsSettings.Instance);
+            else
+                SettingsStore.LoadSettings(BetterCommentsSettings.Instance); // Discard unsaved changes
 
-      protected override void OnClosed(EventArgs e)
-      {
-         if (TokensValidated)
-         {
-            SettingsStore.SaveSettings(Settings.Instance);
-         }
-         else
-         {
-            SettingsStore.LoadSettings(Settings.Instance);
-         }
-
-         base.OnClosed(e);
-      }
-
-      protected bool ValidateTokens()
-      {
-         var rule = new RequiredAndUniqueRule();
-
-         foreach (var tk in Settings.Instance.CommentTokens)
-         {
-            if (!rule.Validate(tk.CurrentValue, CultureInfo.InvariantCulture).IsValid)
-               return false;
-         }
-
-         return true;
-      }
-
-      protected void ShowInvalidTokenMessage()
-      {
-         SystemSounds.Exclamation.Play();
-         MessageBox.Show("Invalid token!", "Better Comments", MessageBoxButton.OK, MessageBoxImage.Error);
-      }
-   }
+            applied = false;
+            base.OnClosed(e);
+        }
+    }
 }

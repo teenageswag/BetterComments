@@ -1,61 +1,57 @@
-﻿using BetterComments.Options;
+﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+
+using BetterComments.Options;
 using Microsoft.VisualStudio.Text;
-using System;
 using System.Collections.Generic;
 
 namespace BetterComments.CommentsTagging
 {
-   internal class CppCommentParser : CommentParser
-   {
-      public override bool IsValidComment(SnapshotSpan span)
-      {
-         var txt = span.GetText();
+    /// <summary>
+    /// Parses C/C++ single-line (<c>//</c>) and block (<c>/* … */</c>) comments.
+    /// Multi-line block comments use the same per-section colouring as the C# parser.
+    /// </summary>
+    internal sealed class CppCommentParser : CommentParser
+    {
+        private const string Opener = "/*";
+        private const string Closer = "*/";
 
-         return txt.StartsWith("//", OrdinalIgnoreCase) || txt.StartsWith("/*", OrdinalIgnoreCase);
-      }
+        /// <summary>Initialises the parser with the active settings instance.</summary>
+        public CppCommentParser(BetterCommentsSettings settings) : base(settings) { }
 
-      protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType)
-      {
-         var spanText = span.GetText().ToLower();
+        /// <inheritdoc/>
+        public override bool IsValidComment(SnapshotSpan span)
+        {
+            var txt = span.GetText();
+            return txt.StartsWith("//", OrdinalIgnoreCase)
+                || txt.StartsWith(Opener, OrdinalIgnoreCase);
+        }
 
-         var commentSpans = new List<SnapshotSpan>();
+        /// <inheritdoc/>
+        protected override int GetDelimiterLength(SnapshotSpan span) => 2;
 
-         var startOffset = ParseHelper.SingleLineCommentStartIndex(spanText, "////", commentType);
+        /// <inheritdoc/>
+        public override Comment Parse(SnapshotSpan span)
+        {
+            if (span.GetText().StartsWith(Opener, OrdinalIgnoreCase))
+                return new Comment(ParseHelper.ParseBlockCommentSegments(
+                    span, Opener, Closer, ShouldHighlightKeywordOnly));
 
-         // single line comment
-         if (spanText.StartsWith("//", OrdinalIgnoreCase))
-         {
-            commentSpans.Add(
-               new SnapshotSpan(span.Snapshot, span.Start + startOffset, span.Length - startOffset));
-         }
-         // delimited comment in a single line
-         else if (spanText.StartsWith("/*", OrdinalIgnoreCase)
-               && spanText.EndsWith("*/", OrdinalIgnoreCase)
-               && spanText.Length > 5)
-         {
-            startOffset = ParseHelper.DelimitedCommentStartIndex(spanText, commentType);
+            return base.Parse(span);
+        }
 
-            var indexOfStarter = spanText.IndexOf("*/", OrdinalIgnoreCase);
-            var spanLength = spanText.IndexOfFirstCharReverse(indexOfStarter - 1) - (startOffset - 1);
+        /// <inheritdoc/>
+        protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType)
+        {
+            var spanText   = span.GetText();
+            var tokenStart = ParseHelper.FindTokenStart(spanText, GetDelimiterLength(span));
 
-            if (spanLength > 0)
-               commentSpans.Add(new SnapshotSpan(span.Snapshot, span.Start + startOffset, spanLength));
-         }
+            if (tokenStart < 0)
+                return new Comment(span, CommentType.Normal);
 
-         return new Comment(commentSpans, commentType);
-      }
-
-      protected override CommentType GetCommentType(SnapshotSpan span)
-      {
-         if (Settings.StrikethroughDoubleComments && span.GetText().StartsWith("////", OrdinalIgnoreCase))
-            return CommentType.Crossed;
-
-         return base.GetCommentType(span);
-      }
-
-      protected override string SpanTextWithoutCommentStarter(SnapshotSpan span)
-      {
-         return span.GetText().Substring(2);
-      }
-   }
+            return new Comment(
+                new SnapshotSpan(span.Snapshot, span.Start + tokenStart, span.Length - tokenStart),
+                commentType);
+        }
+    }
 }

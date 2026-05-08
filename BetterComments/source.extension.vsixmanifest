@@ -1,28 +1,51 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
+<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011"
+                               xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
     <Metadata>
-        <Identity Id="BetterComments.Omar Rwemi.646f2284-7979-4af0-a676-4f2d7693df8e" Version="1.0" Language="en-US" Publisher="Omar Rwemi" />
-        <DisplayName>Better Comments VS2022</DisplayName>
-        <Description xml:space="preserve">Better Comments is a Visual Studio extension that gives you the ability to customize the font and opacity of your comments independently of the editor's font settings. It also adds four additional comment classifications, each classification with its own customizable foreground.</Description>
+        <Identity Id="BetterComments.Omar Rwemi.646f2284-7979-4af0-a676-4f2d7693df8e"
+                  Version="2.0" Language="en-US" Publisher="Omar Rwemi" />
+        <DisplayName>Better Comments</DisplayName>
+        <Description xml:space="preserve">Highlights four comment classifications (Critical, Warning, Ideas, Info) in any language file.
+Supports VS 2019 (16.x), VS 2022 (17.x), and VS 2026 (18.x).
+Configure font, size, opacity, italic, bold, underline and keyword-only highlight per classification
+via Tools → Options → Better Comments.</Description>
         <License>Resources\LICENSE</License>
         <Icon>Resources\Icon.png</Icon>
         <PreviewImage>Resources\PreviewImage.png</PreviewImage>
-        <Tags>Better, Comments, Italic, Bold, Opacity, Font, Size, Categorize, Color, Colorize</Tags>
+        <Tags>Better, Comments, Color, Colorize, TODO, ERROR, WARNING, NOTE, Font, Italic, Bold</Tags>
     </Metadata>
 
     <Installation>
-        <InstallationTarget Version="[17.0, 18.0)" Id="Microsoft.VisualStudio.Pro">
+        <!-- Community -->
+        <InstallationTarget Version="[16.0, 19.0)" Id="Microsoft.VisualStudio.Community">
+            <ProductArchitecture>amd64</ProductArchitecture>
+        </InstallationTarget>
+        <!-- Professional -->
+        <InstallationTarget Version="[16.0, 19.0)" Id="Microsoft.VisualStudio.Pro">
+            <ProductArchitecture>amd64</ProductArchitecture>
+        </InstallationTarget>
+        <!-- Enterprise -->
+        <InstallationTarget Version="[16.0, 19.0)" Id="Microsoft.VisualStudio.Enterprise">
             <ProductArchitecture>amd64</ProductArchitecture>
         </InstallationTarget>
     </Installation>
+
     <Dependencies>
-        <Dependency Id="Microsoft.Framework.NDP" DisplayName="Microsoft .NET Framework" d:Source="Manual" Version="[4.7.2,)" />
+        <Dependency Id="Microsoft.Framework.NDP" DisplayName="Microsoft .NET Framework"
+                    d:Source="Manual" Version="[4.7.2,)" />
     </Dependencies>
+
     <Assets>
-        <Asset Type="Microsoft.VisualStudio.MefComponent" d:Source="Project" d:ProjectName="%CurrentProject%" Path="|%CurrentProject%|" />
-        <Asset Type="Microsoft.VisualStudio.VsPackage" d:Source="Project" d:ProjectName="%CurrentProject%" Path="|%CurrentProject%;PkgdefProjectOutputGroup|" />
+        <Asset Type="Microsoft.VisualStudio.MefComponent"
+               d:Source="Project" d:ProjectName="%CurrentProject%"
+               Path="|%CurrentProject%|" />
+        <Asset Type="Microsoft.VisualStudio.VsPackage"
+               d:Source="Project" d:ProjectName="%CurrentProject%"
+               Path="|%CurrentProject%;PkgdefProjectOutputGroup|" />
     </Assets>
+
     <Prerequisites>
-        <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" Version="[17.0,)" DisplayName="Visual Studio core editor" />
+        <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor"
+                      Version="[16.0,19.0)" DisplayName="Visual Studio core editor" />
     </Prerequisites>
 </PackageManifest>

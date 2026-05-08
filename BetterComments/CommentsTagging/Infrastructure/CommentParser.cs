@@ -1,65 +1,114 @@
-﻿using BetterComments.Options;
+﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+
+using BetterComments.Options;
 using Microsoft.VisualStudio.Text;
-using System;
-using System.Collections.Generic;
 
 namespace BetterComments.CommentsTagging
 {
-   internal abstract class CommentParser : ICommentParser
-   {
-      protected readonly StringComparison OrdinalIgnoreCase = StringComparison.OrdinalIgnoreCase;
+    /// <summary>
+    /// Abstract base class for all language-specific comment parsers.
+    ///
+    /// Flow:
+    ///   1. <see cref="GetCommentType"/> strips the comment delimiter, trims leading whitespace,
+    ///      and delegates to <see cref="TokenMatcher.Match"/>.
+    ///   2. If the type is <see cref="CommentType.Normal"/> the span is returned as-is.
+    ///   3. If "highlight keyword only" is enabled for the matched type, only the token span is
+    ///      returned (e.g. just "TODO").
+    ///   4. Otherwise <see cref="SpecificParse"/> is called for language-aware span construction
+    ///      (handles multi-line blocks, partial spans, etc.).
+    /// </summary>
+    internal abstract class CommentParser : ICommentParser
+    {
+        /// <summary>Shared case-insensitive comparison constant.</summary>
+        protected static readonly System.StringComparison OrdinalIgnoreCase =
+            System.StringComparison.OrdinalIgnoreCase;
 
-      protected readonly Settings Settings = Settings.Instance;
+        /// <summary>Extension settings used to query per-classification options at parse time.</summary>
+        protected readonly BetterCommentsSettings Settings;
 
-      #region ICommentParser Members
+        /// <summary>Initialises the parser with the active settings instance.</summary>
+        protected CommentParser(BetterCommentsSettings settings) => Settings = settings;
 
-      public virtual Comment Parse(SnapshotSpan span)
-      {
-         var commentType = GetCommentType(span);
+        // ──────────────────────────────────────────────────────────────────────────────────────
+        //  ICommentParser
+        // ──────────────────────────────────────────────────────────────────────────────────────
 
-         if (commentType == CommentType.Normal)
-            return new Comment(new List<SnapshotSpan> { span }, CommentType.Normal);
+        /// <inheritdoc/>
+        public abstract bool IsValidComment(SnapshotSpan span);
 
-         // Color only the "Todo" keyword.
-         if (Settings.HighlightTaskKeywordOnly && commentType == CommentType.Task)
-         {
-            var spanText = span.GetText().ToLower();
-            var token = Settings.GetTokenValue(CommentType.Task);
-            var start = spanText.IndexOf(token, OrdinalIgnoreCase);
+        /// <inheritdoc/>
+        public virtual Comment Parse(SnapshotSpan span)
+        {
+            var commentType = GetCommentType(span);
 
-            return new Comment(
-                new SnapshotSpan(span.Snapshot, span.Start + start, token.Length),
-                CommentType.Task);
-         }
+            if (commentType == CommentType.Normal)
+                return new Comment(span, CommentType.Normal);
 
-         return SpecificParse(span, commentType);
-      }
+            // ── Keyword-only highlight ────────────────────────────────────────────────────────
+            if (ShouldHighlightKeywordOnly(commentType))
+            {
+                var raw      = span.GetText();
+                var delimLen = GetDelimiterLength(span);
+                var tokStart = ParseHelper.FindTokenStart(raw, delimLen);
+                var token    = tokStart >= 0 ? ParseHelper.GetMatchedToken(raw, delimLen) : null;
 
-      public abstract bool IsValidComment(SnapshotSpan span);
+                if (token != null)
+                    return new Comment(
+                        new SnapshotSpan(span.Snapshot, span.Start + tokStart, token.Length),
+                        commentType);
+            }
 
-      #endregion ICommentParser Members
+            return SpecificParse(span, commentType);
+        }
 
-      protected virtual CommentType GetCommentType(SnapshotSpan span)
-      {
-         var commentText = SpanTextWithoutCommentStarter(span).ToLower().Trim();
+        // ──────────────────────────────────────────────────────────────────────────────────────
+        //  Abstract / virtual members for subclasses
+        // ──────────────────────────────────────────────────────────────────────────────────────
 
-         if (commentText.StartsWith(Settings.GetTokenValue(CommentType.Important), OrdinalIgnoreCase))
-            return CommentType.Important;
+        /// <summary>
+        /// Determines the comment type by stripping the leading delimiter and passing the
+        /// remaining content (trimmed) to <see cref="TokenMatcher.Match"/>.
+        /// </summary>
+        protected virtual CommentType GetCommentType(SnapshotSpan span)
+        {
+            var raw     = span.GetText();
+            var delLen  = GetDelimiterLength(span);
+            var content = delLen < raw.Length ? raw.Substring(delLen).TrimStart() : string.Empty;
+            return TokenMatcher.Match(content);
+        }
 
-         if (commentText.StartsWith(Settings.GetTokenValue(CommentType.Question), OrdinalIgnoreCase))
-            return CommentType.Question;
+        /// <summary>
+        /// Returns the character length of the opening comment delimiter for this span
+        /// (e.g. 2 for <c>//</c> or <c>/*</c>, 1 for <c>#</c>, 4 for <c>&lt;!--</c>).
+        /// </summary>
+        protected abstract int GetDelimiterLength(SnapshotSpan span);
 
-         if (commentText.StartsWith(Settings.GetTokenValue(CommentType.Crossed), OrdinalIgnoreCase))
-            return CommentType.Crossed;
+        /// <summary>
+        /// Produces the final tagged <see cref="Comment"/> when the caller has already determined
+        /// that the span is not <see cref="CommentType.Normal"/> and keyword-only mode is inactive.
+        /// Responsible for computing accurate sub-span positions (handles multi-line blocks, etc.).
+        /// </summary>
+        protected abstract Comment SpecificParse(SnapshotSpan span, CommentType commentType);
 
-         if (commentText.StartsWith(Settings.GetTokenValue(CommentType.Task), OrdinalIgnoreCase))
-            return CommentType.Task;
+        // ──────────────────────────────────────────────────────────────────────────────────────
+        //  Private helpers
+        // ──────────────────────────────────────────────────────────────────────────────────────
 
-         return CommentType.Normal;
-      }
-
-      protected abstract Comment SpecificParse(SnapshotSpan span, CommentType commentType);
-
-      protected abstract string SpanTextWithoutCommentStarter(SnapshotSpan span);
-   }
+        /// <summary>
+        /// Returns <c>true</c> when only the matched keyword token should be highlighted
+        /// (rather than the full comment content) for the given classification type.
+        /// </summary>
+        protected bool ShouldHighlightKeywordOnly(CommentType type)
+        {
+            switch (type)
+            {
+                case CommentType.Critical: return Settings.CriticalHighlightKeywordOnly;
+                case CommentType.Warning:  return Settings.WarningHighlightKeywordOnly;
+                case CommentType.Ideas:    return Settings.IdeasHighlightKeywordOnly;
+                case CommentType.Info:     return Settings.InfoHighlightKeywordOnly;
+                default:                   return false;
+            }
+        }
+    }
 }

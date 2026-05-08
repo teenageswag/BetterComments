@@ -1,4 +1,6 @@
-﻿using BetterComments.CommentsClassification;
+﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+
 using BetterComments.Options;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Classification;
@@ -11,131 +13,122 @@ using System.Linq;
 
 namespace BetterComments.CommentsTagging
 {
-   public enum CommentType
-   {
-      Normal,
-      Important,
-      Question,
-      Crossed,
-      Task
-   }
+    /// <summary>
+    /// Produces <see cref="ClassificationTag"/> spans for the four Better Comments classifications.
+    /// Receives pre-classified comment spans from an <see cref="ITagAggregator{T}"/> and delegates
+    /// type detection and span computation to the appropriate language-specific
+    /// <see cref="ICommentParser"/>.
+    /// </summary>
+    internal sealed class CommentTagger : ITagger<ClassificationTag>, IDisposable
+    {
+        private readonly IClassificationTypeRegistryService classRegistry;
+        private readonly ITagAggregator<IClassificationTag> tagAggregator;
+        private readonly BetterCommentsSettings settings = BetterCommentsSettings.Instance;
 
-   internal class CommentTagger : ITagger<ClassificationTag>, IDisposable
-   {
-      private readonly Settings settings = Settings.Instance;
+        /// <summary>
+        /// Raised when tags change.  Not currently fired (tags are recomputed on every request).
+        /// </summary>
+#pragma warning disable CS0067
+        public event EventHandler<SnapshotSpanEventArgs> TagsChanged;
+#pragma warning restore CS0067
 
-      private readonly IClassificationTypeRegistryService classRegistry;
-      private readonly ITagAggregator<IClassificationTag> tagAggregator;
+        /// <summary>
+        /// Initialises the tagger with the classification type registry and tag aggregator.
+        /// </summary>
+        public CommentTagger(IClassificationTypeRegistryService registry,
+                             ITagAggregator<IClassificationTag> aggregator)
+        {
+            classRegistry = registry;
+            tagAggregator  = aggregator;
+        }
 
-      public CommentTagger(IClassificationTypeRegistryService reg,
-                           ITagAggregator<IClassificationTag> agg)
-      {
-         classRegistry = reg;
-         tagAggregator = agg;
-      }
+        /// <inheritdoc/>
+        public IEnumerable<ITagSpan<ClassificationTag>> GetTags(NormalizedSnapshotSpanCollection spans)
+        {
+            var snapshot = spans[0].Snapshot;
+            var results  = new List<TagSpan<ClassificationTag>>();
+            var parser   = CreateCommentParser(snapshot.ContentType);
 
-#pragma warning disable 0067
+            if (parser == null) return results; // Unsupported content type
 
-      public event EventHandler<SnapshotSpanEventArgs> TagsChanged;
-
-#pragma warning restore 0067
-
-      public IEnumerable<ITagSpan<ClassificationTag>> GetTags(NormalizedSnapshotSpanCollection spans)
-      {
-         var snapshot = spans[0].Snapshot;
-         var results = new List<TagSpan<ClassificationTag>>();
-         var parser = CreateCommentParser(snapshot.ContentType);
-
-         if (parser == null) // Content is not supported
-            return results;
-
-         // Work through all comment tags associated with the passed spans. Ignore XML docs.
-         foreach (var tagSpan in tagAggregator.GetTags(spans).Where(m => m.Tag.IsComment() && !m.Tag.IsXmlDoc()))
-         {
-            // Get all the spans associated with the current tag, mapped to our snapshot
-            foreach (var span in tagSpan.Span.GetSpans(snapshot).Where(s => parser.IsValidComment(s)))
+            foreach (var tagSpan in tagAggregator.GetTags(spans)
+                                                  .Where(m => m.Tag.IsComment() && !m.Tag.IsXmlDoc()))
             {
-               try
-               {
-                  results.AddRange(CreateTagSpans(parser.Parse(span)));
-               }
-               catch (Exception ex)
-               {
-                  //MessageBox.Show("Better Comments - Exception", ex.ToString());
-                  // Debug.Fail($"Tagging Exception /n/n {ex.ToString()}");
-                  Debug.WriteLine($"Exception in tagger : {ex}");
-               }
+                foreach (var span in tagSpan.Span.GetSpans(snapshot).Where(s => parser.IsValidComment(s)))
+                {
+                    try
+                    {
+                        results.AddRange(CreateTagSpans(parser.Parse(span)));
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"[BetterComments] Exception while tagging: {ex}");
+                    }
+                }
             }
-         }
 
-         return results;
-      }
+            return results;
+        }
 
-      public IEnumerable<TagSpan<ClassificationTag>> CreateTagSpans(Comment comment)
-      {
-         return comment.Spans.Select(s => new TagSpan<ClassificationTag>(s, CreateTag(comment.Type)));
-      }
+        // ──────────────────────────────────────────────────────────────────────────────────────
+        //  Private helpers
+        // ──────────────────────────────────────────────────────────────────────────────────────
 
-      private ClassificationTag CreateTag(CommentType type)
-      {
-         switch (type)
-         {
-            case CommentType.Important:
-               return new ClassificationTag(classRegistry.GetClassificationType(CommentNames.IMPORTANT_COMMENT));
+        private IEnumerable<TagSpan<ClassificationTag>> CreateTagSpans(Comment comment)
+        {
+            foreach (var seg in comment.Segments)
+            {
+                if (seg.Type != CommentType.Normal)
+                    yield return new TagSpan<ClassificationTag>(seg.Span, CreateTag(seg.Type));
+            }
+        }
 
-            case CommentType.Crossed:
-               return new ClassificationTag(classRegistry.GetClassificationType(CommentNames.CROSSED_COMMENT));
+        private ClassificationTag CreateTag(CommentType type)
+        {
+            switch (type)
+            {
+                case CommentType.Critical:
+                    return new ClassificationTag(classRegistry.GetClassificationType(Constants.CriticalComment));
+                case CommentType.Warning:
+                    return new ClassificationTag(classRegistry.GetClassificationType(Constants.WarningComment));
+                case CommentType.Ideas:
+                    return new ClassificationTag(classRegistry.GetClassificationType(Constants.IdeasComment));
+                case CommentType.Info:
+                    return new ClassificationTag(classRegistry.GetClassificationType(Constants.InfoComment));
+                default:
+                    return new ClassificationTag(classRegistry.GetClassificationType("comment"));
+            }
+        }
 
-            case CommentType.Question:
-               return new ClassificationTag(classRegistry.GetClassificationType(CommentNames.QUESTION_COMMENT));
+        /// <summary>
+        /// Selects the language-specific parser for the given content type, or returns
+        /// <c>null</c> if the content type is not supported by this extension.
+        /// </summary>
+        private ICommentParser CreateCommentParser(IContentType contentType)
+        {
+            var s = settings;
 
-            case CommentType.Task:
-               return new ClassificationTag(classRegistry.GetClassificationType(CommentNames.TASK_COMMENT));
+            if (contentType.IsOfType(Constants.ContentTypeCSharp))      return new CSharpCommentParser(s);
+            if (contentType.IsOfType(Constants.ContentTypeBasic))       return new VBCommentParser(s);
+            if (contentType.IsOfType(Constants.ContentTypePython))      return new PythonCommentParser(s);
+            if (contentType.IsOfType(Constants.ContentTypeFSharp))      return new FSharpCommentParser(s);
+            if (contentType.IsOfType(Constants.ContentTypeCpp))         return new CppCommentParser(s);
+            if (contentType.IsOfType(Constants.ContentTypeJavaScript)
+             || contentType.IsOfType(Constants.ContentTypeTypeScript))  return new JavaScriptCommentParser(s);
+            if (contentType.IsOfType(Constants.ContentTypeRazorCSharp)) return new MarkupCommentParser(s);
 
-            default:
-               return new ClassificationTag(classRegistry.GetClassificationType("comment"));
-         }
-      }
+            var name = contentType.TypeName.ToLowerInvariant();
+            if (name.Contains(Constants.ContentTypeXaml) || name.Contains(Constants.ContentTypeHtml))
+                return new MarkupCommentParser(s);
 
-      private ICommentParser CreateCommentParser(IContentType contentType)
-      {
-         if (contentType.IsOfType("CSharp"))
-            return new CSharpCommentParser();
+            return null;
+        }
 
-         if (contentType.IsOfType("Basic"))
-            return new VBCommentParser();
-
-         if (contentType.IsOfType("Python"))
-            return new PythonCommentParser();
-
-         if (contentType.IsOfType("F#"))
-            return new FSharpCommentParser();
-
-         if (contentType.IsOfType("C/C++"))
-            return new CppCommentParser();
-
-         if (contentType.IsOfType("JScript") || contentType.IsOfType("TypeScript"))
-            return new JavaScriptCommentParser();
-
-         if (contentType.IsOfType("RazorCSharp"))
-            return new MarkupCommentParser();
-
-         var temp = contentType.TypeName.ToLower();
-
-         if (temp.Contains("xaml") || temp.Contains("html"))
-            return new MarkupCommentParser();
-
-         return null;
-      }
-
-      #region IDisposable
-
-      public void Dispose()
-      {
-         tagAggregator.Dispose();
-         GC.SuppressFinalize(this);
-      }
-
-      #endregion IDisposable
-   }
+        /// <inheritdoc/>
+        public void Dispose()
+        {
+            tagAggregator.Dispose();
+            GC.SuppressFinalize(this);
+        }
+    }
 }

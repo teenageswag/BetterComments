@@ -1,143 +1,232 @@
-﻿using BetterComments.CommentsClassification;
+﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+
 using BetterComments.Options;
 using Microsoft.VisualStudio.Text.Classification;
 using Microsoft.VisualStudio.Text.Editor;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Windows;
 using System.Windows.Media;
 
 namespace BetterComments.CommentsViewCustomization
 {
-   internal sealed class CommentViewDecorator
-   {
-      private bool isDecorating;
-      private readonly IClassificationFormatMap formatMap;
-      private readonly IClassificationTypeRegistryService regService;
+    /// <summary>
+    /// Applies runtime formatting overrides (font family, size offset, italic, opacity, bold,
+    /// underline) to all comment classifications in a single WPF text view.
+    ///
+    /// Global settings (font, size, italic, opacity) are applied to every classification whose
+    /// name contains "comment".  Per-classification settings (bold, underline) are applied only
+    /// to the four Better Comments types.
+    /// </summary>
+    internal sealed class CommentViewDecorator
+    {
+        private bool isDecorating;
 
-      private readonly Settings settings = Settings.Instance;
+        private readonly IClassificationFormatMap formatMap;
+        private readonly IClassificationTypeRegistryService regService;
+        private readonly BetterCommentsSettings settings = BetterCommentsSettings.Instance;
 
-      private static readonly List<string> commentTypes = new List<string>()
+        /// <summary>
+        /// Well-known VS classification names that are treated as "comment" types.
+        /// Any classification whose name <em>contains</em> "comment" and is not in this list is
+        /// picked up by the "unknown" pass.
+        /// </summary>
+        private static readonly HashSet<string> KnownCommentTypes = new HashSet<string>(
+            StringComparer.OrdinalIgnoreCase)
+        {
+            "comment",
+            "xml doc comment",
+            "vb xml doc comment",
+            "xml comment",
+            "html comment",
+            "xaml comment",
+        };
+
+        // ──────────────────────────────────────────────────────────────────────────────────────
+        //  Factory
+        // ──────────────────────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Returns the existing decorator for <paramref name="view"/>, or creates and attaches a
+        /// new one.
+        /// </summary>
+        public static CommentViewDecorator Create(
+            ITextView view,
+            IClassificationFormatMap map,
+            IClassificationTypeRegistryService service)
+        {
+            return view.Properties.GetOrCreateSingletonProperty(
+                () => new CommentViewDecorator(view, map, service));
+        }
+
+        // ──────────────────────────────────────────────────────────────────────────────────────
+        //  Constructor
+        // ──────────────────────────────────────────────────────────────────────────────────────
+
+        private CommentViewDecorator(
+            ITextView view,
+            IClassificationFormatMap map,
+            IClassificationTypeRegistryService service)
+        {
+            view.GotAggregateFocus += OnViewGotFocus;
+            SettingsStore.SettingsSaved += OnSettingsSaved;
+
+            formatMap  = map;
+            regService = service;
+
+            Decorate();
+        }
+
+        // ──────────────────────────────────────────────────────────────────────────────────────
+        //  Event handlers
+        // ──────────────────────────────────────────────────────────────────────────────────────
+
+        private void OnSettingsSaved()
+        {
+            if (!isDecorating) Decorate();
+        }
+
+        private void OnViewGotFocus(object sender, EventArgs e)
+        {
+            if (sender is ITextView view)
+                view.GotAggregateFocus -= OnViewGotFocus;
+
+            if (!isDecorating) Decorate();
+        }
+
+        // ──────────────────────────────────────────────────────────────────────────────────────
+        //  Decoration logic
+        // ──────────────────────────────────────────────────────────────────────────────────────
+
+        private void Decorate()
+        {
+            try
             {
-                "comment",
-                "xml doc comment",
-                "vb xml doc comment",
-                "xml comment",
-                "html comment",
-                "xaml comment",
-            };
+                isDecorating = true;
+                formatMap.BeginBatchUpdate();
 
-      public static CommentViewDecorator Create(ITextView view, IClassificationFormatMap map,
-                                                IClassificationTypeRegistryService service)
-      {
-         return view.Properties.GetOrCreateSingletonProperty(() => new CommentViewDecorator(view, map, service));
-      }
+                DecorateKnownCommentTypes();
+                DecorateUnknownCommentTypes();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[BetterComments] Exception while decorating: {ex.Message}");
+            }
+            finally
+            {
+                formatMap.EndBatchUpdate();
+                isDecorating = false;
+            }
+        }
 
-      private CommentViewDecorator(ITextView view, IClassificationFormatMap map,
-                                   IClassificationTypeRegistryService service)
-      {
-         view.GotAggregateFocus += TextView_GotAggregateFocus;
+        private void DecorateKnownCommentTypes()
+        {
+            foreach (var name in KnownCommentTypes)
+            {
+                var classificationType = regService.GetClassificationType(name);
+                if (classificationType != null)
+                    SetProperties(classificationType);
+            }
+        }
 
-         SettingsStore.SettingsSaved += OnSettingsSaved;
+        private void DecorateUnknownCommentTypes()
+        {
+            foreach (var ct in formatMap.CurrentPriorityOrder)
+            {
+                if (ct == null) continue;
 
-         formatMap = map;
-         regService = service;
+                var name = ct.Classification.ToLowerInvariant();
+                if (name.Contains("comment") && !KnownCommentTypes.Contains(ct.Classification))
+                    SetProperties(ct);
+            }
+        }
 
-         Decorate();
-      }
+        /// <summary>
+        /// Applies the current settings to one classification type.
+        /// Global settings (font/size/italic/opacity) are always applied.
+        /// Bold and underline are applied only for the four Better Comments classifications.
+        /// </summary>
+        private void SetProperties(IClassificationType classificationType)
+        {
+            var props    = formatMap.GetTextProperties(classificationType);
+            var name     = classificationType.Classification;
+            var isBCType = IsBetterCommentsType(name);
 
-      private void OnSettingsSaved()
-      {
-         if (!isDecorating)
-            Decorate();
-      }
+            // ── Bold & underline (Better Comments types only) ─────────────────────────────────
+            bool isBold      = isBCType && GetBold(name);
+            bool isUnderline = isBCType && GetUnderline(name);
 
-      private void TextView_GotAggregateFocus(object sender, EventArgs e)
-      {
-         if (sender is ITextView view)
-            view.GotAggregateFocus -= TextView_GotAggregateFocus;
+            // ── Font family ───────────────────────────────────────────────────────────────────
+            var currentTf  = props.TypefaceEmpty ? null : props.Typeface;
+            var fontFamily = !string.IsNullOrWhiteSpace(settings.Font)
+                           ? new FontFamily(settings.Font)
+                           : (currentTf?.FontFamily ?? new FontFamily());
 
-         if (!isDecorating)
-            Decorate();
-      }
+            var typeface = new Typeface(
+                fontFamily,
+                settings.Italic ? FontStyles.Italic : FontStyles.Normal,
+                isBold         ? FontWeights.Bold   : FontWeights.Normal,
+                FontStretches.Normal);
 
-      private void Decorate()
-      {
-         try
-         {
-            isDecorating = true;
-            DecorateKnownClassificationTypes();
-            DecorateUnknowClassificationTypes();
-         }
-         catch (Exception ex)
-         {
-            //TODO: Handle the exception gracefully.
-            Debug.Assert(false, "Exception while formatting! \n", ex.Message);
-         }
-         finally
-         {
-            isDecorating = false;
-         }
-      }
+            props = props.SetTypeface(typeface);
 
-      private void DecorateKnownClassificationTypes()
-      {
-         var knowns = commentTypes.Select(type => regService.GetClassificationType(type))
-                                  .Where(type => type != null);
+            // ── Font size ─────────────────────────────────────────────────────────────────────
+            var targetSize = GetEditorTextSize() + settings.Size;
+            if (Math.Abs(targetSize - props.FontRenderingEmSize) > 0.01)
+                props = props.SetFontRenderingEmSize(targetSize);
 
-         foreach (var classificationType in knowns)
-            SetProperties(classificationType);
-      }
+            // ── Opacity ───────────────────────────────────────────────────────────────────────
+            if (settings.Opacity >= 0.1 && settings.Opacity <= 1.0)
+                props = props.SetForegroundOpacity(settings.Opacity);
 
-      private void DecorateUnknowClassificationTypes()
-      {
-         var unknowns = from type in formatMap.CurrentPriorityOrder.Where(type => type != null)
-                        let name = type.Classification.ToLowerInvariant()
-                        where name.Contains("comment") && !commentTypes.Contains(name)
-                        select type;
+            // ── Text decorations (underline) ──────────────────────────────────────────────────
+            if (isBCType)
+            {
+                var decorations = new TextDecorationCollection();
+                if (isUnderline)
+                    decorations.Add(TextDecorations.Underline[0]);
+                props = props.SetTextDecorations(decorations);
+            }
 
-         foreach (var classificationType in unknowns)
-            SetProperties(classificationType);
-      }
+            formatMap.SetTextProperties(classificationType, props);
+        }
 
-      private void SetProperties(IClassificationType classificationType)
-      {
-         //? Might need to benchmark this function for performance.
+        // ──────────────────────────────────────────────────────────────────────────────────────
+        //  Helpers
+        // ──────────────────────────────────────────────────────────────────────────────────────
 
-         var properties = formatMap.GetTextProperties(classificationType);
-         var fontSize = GetEditorTextSize() + settings.Size;
+        private double GetEditorTextSize()
+        {
+            var textType = regService.GetClassificationType("text");
+            return textType != null
+                ? formatMap.GetTextProperties(textType).FontRenderingEmSize
+                : 12.0;
+        }
 
-         if (!string.IsNullOrWhiteSpace(settings.Font))
-            properties = properties.SetTypeface(new Typeface(settings.Font));
+        private static bool IsBetterCommentsType(string name)
+            => name == Constants.CriticalComment
+            || name == Constants.WarningComment
+            || name == Constants.IdeasComment
+            || name == Constants.InfoComment;
 
-         if (Math.Abs(fontSize - properties.FontRenderingEmSize) > 0)
-            properties = properties.SetFontRenderingEmSize(fontSize);
+        private bool GetBold(string name)
+        {
+            if (name == Constants.CriticalComment) return settings.CriticalBold;
+            if (name == Constants.WarningComment)  return settings.WarningBold;
+            if (name == Constants.IdeasComment)    return settings.IdeasBold;
+            if (name == Constants.InfoComment)     return settings.InfoBold;
+            return false;
+        }
 
-         if (properties.Italic != settings.Italic)
-            properties = properties.SetItalic(settings.Italic);
-
-         if (settings.Opacity >= 0.1 && settings.Opacity <= 1)
-            properties = properties.SetForegroundOpacity(settings.Opacity);
-
-         if (classificationType.IsOfType(CommentNames.IMPORTANT_COMMENT))
-            properties = properties.SetTextDecorations(GetTextDecoration(settings));
-
-         formatMap.SetTextProperties(classificationType, properties);
-      }
-
-      private double GetEditorTextSize()
-      {
-         return formatMap.GetTextProperties(regService.GetClassificationType("text"))
-                         .FontRenderingEmSize;
-      }
-
-      private TextDecorationCollection GetTextDecoration(Settings settings)
-      {
-         return settings.UnderlineImportantComments
-                    ? new TextDecorationCollection { TextDecorations.Underline }
-                    : new TextDecorationCollection();
-      }
-   }
+        private bool GetUnderline(string name)
+        {
+            if (name == Constants.CriticalComment) return settings.CriticalUnderline;
+            if (name == Constants.WarningComment)  return settings.WarningUnderline;
+            if (name == Constants.IdeasComment)    return settings.IdeasUnderline;
+            if (name == Constants.InfoComment)     return settings.InfoUnderline;
+            return false;
+        }
+    }
 }

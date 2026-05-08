@@ -1,85 +1,107 @@
-﻿using BetterComments.Options;
+﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+
+using BetterComments.Options;
 using Microsoft.VisualStudio.Text;
 using System.Collections.Generic;
 using System.Linq;
 
 namespace BetterComments.CommentsTagging
 {
-   internal class JavaScriptCommentParser : CommentParser
-   {
-      public override bool IsValidComment(SnapshotSpan span)
-      {
-         var txt = span.GetText();
+    /// <summary>
+    /// Parses JavaScript and TypeScript single-line (<c>//</c>) and single-line delimited
+    /// (<c>/* … */</c>) comments.
+    ///
+    /// The VS JavaScript/TypeScript tagger sometimes delivers only a partial span (e.g. just the
+    /// opening token characters) rather than the complete comment line.  This parser uses
+    /// <see cref="ParseHelper.CompleteSingleLineCommentSpan"/> and
+    /// <see cref="ParseHelper.CompleteDelimitedCommentSpan"/> to reconstruct the full span from
+    /// the underlying snapshot before performing token detection.
+    /// </summary>
+    internal sealed class JavaScriptCommentParser : CommentParser
+    {
+        /// <summary>Initialises the parser with the active settings instance.</summary>
+        public JavaScriptCommentParser(BetterCommentsSettings settings) : base(settings) { }
 
-         return (txt.StartsWith("//", OrdinalIgnoreCase) || txt.StartsWith("/*", OrdinalIgnoreCase));
-      }
+        /// <inheritdoc/>
+        public override bool IsValidComment(SnapshotSpan span)
+        {
+            var txt = span.GetText();
+            return txt.StartsWith("//", OrdinalIgnoreCase)
+                || txt.StartsWith("/*", OrdinalIgnoreCase);
+        }
 
-      public override Comment Parse(SnapshotSpan span)
-      {
-         // Just get enough length for GetCommentType() to work.
-         var len = Settings.CommentTokens.Max(t => t.CurrentValue.Length) * 2;
+        /// <inheritdoc/>
+        protected override int GetDelimiterLength(SnapshotSpan span) => 2;
 
-         return base.Parse(new SnapshotSpan(span.Snapshot, span.Start, len));
-      }
+        /// <inheritdoc/>
+        protected override CommentType GetCommentType(SnapshotSpan span)
+        {
+            // Reconstruct the full span first so token detection works on the complete text.
+            SnapshotSpan full;
+            var txt = span.GetText();
 
-      protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType)
-      {
-         var spanText = span.GetText().ToLower();
-
-         if (spanText.StartsWith("//", OrdinalIgnoreCase)) //! The comment span consists of a single line.
-         {
-            var fullSpan = ParseHelper.CompleteSingleLineCommentSpan(span, "//");
-
-            spanText = fullSpan.GetText().ToLower();
-
-            var startOffset = ParseHelper.SingleLineCommentStartIndex(spanText, "////", commentType);
-            var spanLength = spanText.Length - startOffset;
-
-            if (spanLength > 0)
+            if (txt.Contains("//"))
             {
-               return new Comment(
-                   new SnapshotSpan(fullSpan.Snapshot, fullSpan.Start + startOffset, spanLength),
-                   commentType);
+                full = ParseHelper.CompleteSingleLineCommentSpan(span, "//");
             }
-         }
-         else if (spanText.Contains("/*"))
-         {
-            var fullSpans = ParseHelper.CompleteDelimitedCommentSpan(span, "/*", "*/");
-
-            if (fullSpans.Count == 1)
+            else
             {
-               spanText = fullSpans[0].GetText().ToLower();
-               var startOffset = ParseHelper.DelimitedCommentStartIndex(spanText, commentType);
-               var closerIndex = spanText.IndexOf("*/", OrdinalIgnoreCase);
-               var spanLength = spanText.IndexOfFirstCharReverse(closerIndex - 1) - (startOffset - 1);
-
-               if (spanLength > 0)
-               {
-                  return new Comment(
-                      new SnapshotSpan(fullSpans[0].Snapshot, fullSpans[0].Start + startOffset, spanLength),
-                      commentType);
-               }
+                var parts = ParseHelper.CompleteDelimitedCommentSpan(span, "/*", "*/");
+                if (parts.Count == 0) return CommentType.Normal;
+                full = parts[0];
             }
-         }
 
-         return new Comment(new List<SnapshotSpan>(), commentType);
-      }
+            var content = full.GetText().Substring(GetDelimiterLength(full)).TrimStart();
+            return TokenMatcher.Match(content);
+        }
 
-      protected override CommentType GetCommentType(SnapshotSpan span)
-      {
-         var fullSpan = span.GetText().Contains("//")
-                      ? ParseHelper.CompleteSingleLineCommentSpan(span, "//")
-                      : ParseHelper.CompleteDelimitedCommentSpan(span, "/*", "*/").First();
+        /// <inheritdoc/>
+        protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType)
+        {
+            var txt = span.GetText();
 
-         if (Settings.StrikethroughDoubleComments && fullSpan.GetText().StartsWith("////", OrdinalIgnoreCase))
-            return CommentType.Crossed;
+            if (txt.Contains("//"))
+            {
+                var full       = ParseHelper.CompleteSingleLineCommentSpan(span, "//");
+                var fullText   = full.GetText();
+                var delimLen   = GetDelimiterLength(full);
+                var tokenStart = ParseHelper.FindTokenStart(fullText, delimLen);
 
-         return base.GetCommentType(fullSpan);
-      }
+                if (tokenStart >= 0)
+                {
+                    var spanLength = fullText.Length - tokenStart;
+                    if (spanLength > 0)
+                        return new Comment(
+                            new SnapshotSpan(full.Snapshot, full.Start + tokenStart, spanLength),
+                            commentType);
+                }
+            }
+            else if (txt.Contains("/*"))
+            {
+                var parts = ParseHelper.CompleteDelimitedCommentSpan(span, "/*", "*/");
+                if (parts.Count > 0)
+                {
+                    var full       = parts[0];
+                    var fullText   = full.GetText();
+                    var delimLen   = GetDelimiterLength(full);
+                    var tokenStart = ParseHelper.FindTokenStart(fullText, delimLen);
 
-      protected override string SpanTextWithoutCommentStarter(SnapshotSpan span)
-      {
-         return span.GetText().Substring(2);
-      }
-   }
+                    if (tokenStart >= 0)
+                    {
+                        var closerIdx  = fullText.IndexOf("*/", OrdinalIgnoreCase);
+                        var lastChar   = fullText.IndexOfFirstCharReverse(closerIdx - 1);
+                        var spanLength = lastChar >= tokenStart ? lastChar - tokenStart + 1 : 0;
+
+                        if (spanLength > 0)
+                            return new Comment(
+                                new SnapshotSpan(full.Snapshot, full.Start + tokenStart, spanLength),
+                                commentType);
+                    }
+                }
+            }
+
+            return new Comment(new List<SnapshotSpan>(), commentType);
+        }
+    }
 }

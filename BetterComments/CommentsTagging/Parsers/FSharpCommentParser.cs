@@ -1,51 +1,58 @@
-﻿using BetterComments.Options;
+﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+
+using BetterComments.Options;
 using Microsoft.VisualStudio.Text;
 using System.Collections.Generic;
 
 namespace BetterComments.CommentsTagging
 {
-   internal class FSharpCommentParser : CommentParser
-   {
-      public override bool IsValidComment(SnapshotSpan span)
-      {
-         var temp = span.GetText();
-         return temp.StartsWith("//", OrdinalIgnoreCase) || temp.StartsWith("(*", OrdinalIgnoreCase);
-      }
+    /// <summary>
+    /// Parses F# single-line (<c>//</c>) and block (<c>(* … *)</c>) comments.
+    /// Multi-line block comments use the same per-section colouring as the C# parser.
+    /// </summary>
+    internal sealed class FSharpCommentParser : CommentParser
+    {
+        private const string BlockOpener = "(*";
+        private const string BlockCloser = "*)";
 
-      protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType)
-      {
-         var spanText = span.GetText().ToLower();
-         var commentSpans = new List<SnapshotSpan>();
-         var startOffset = ParseHelper.SingleLineCommentStartIndex(spanText, "////", commentType);
+        /// <summary>Initialises the parser with the active settings instance.</summary>
+        public FSharpCommentParser(BetterCommentsSettings settings) : base(settings) { }
 
-         if (spanText.StartsWith("//", OrdinalIgnoreCase) && startOffset > 0)
-         {
-            commentSpans.Add(new SnapshotSpan(span.Snapshot, span.Start + startOffset, span.Length - startOffset));
-         }
-         else if (spanText.Contains("(*") && spanText.Contains("*)"))
-         {
-            startOffset = ParseHelper.DelimitedCommentStartIndex(spanText, commentType);
+        /// <inheritdoc/>
+        public override bool IsValidComment(SnapshotSpan span)
+        {
+            var txt = span.GetText();
+            return txt.StartsWith("//", OrdinalIgnoreCase)
+                || txt.StartsWith(BlockOpener, OrdinalIgnoreCase);
+        }
 
-            var closerIndex = spanText.IndexOf("*)", OrdinalIgnoreCase);
-            var spanLength = spanText.IndexOfFirstCharReverse(closerIndex - 1) - (startOffset - 1);
+        /// <inheritdoc/>
+        protected override int GetDelimiterLength(SnapshotSpan span) => 2;
 
-            commentSpans.Add(new SnapshotSpan(span.Snapshot, span.Start + startOffset, spanLength));
-         }
+        /// <inheritdoc/>
+        public override Comment Parse(SnapshotSpan span)
+        {
+            if (span.GetText().StartsWith(BlockOpener, OrdinalIgnoreCase))
+                return new Comment(ParseHelper.ParseBlockCommentSegments(
+                    span, BlockOpener, BlockCloser, ShouldHighlightKeywordOnly));
 
-         return new Comment(commentSpans, commentType);
-      }
+            return base.Parse(span);
+        }
 
-      protected override CommentType GetCommentType(SnapshotSpan span)
-      {
-         if (Settings.StrikethroughDoubleComments && span.GetText().StartsWith("////", OrdinalIgnoreCase))
-            return CommentType.Crossed;
+        /// <inheritdoc/>
+        protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType)
+        {
+            // Only reached for "//" single-line comments.
+            var spanText   = span.GetText();
+            var tokenStart = ParseHelper.FindTokenStart(spanText, GetDelimiterLength(span));
 
-         return base.GetCommentType(span);
-      }
+            if (tokenStart < 0)
+                return new Comment(span, CommentType.Normal);
 
-      protected override string SpanTextWithoutCommentStarter(SnapshotSpan span)
-      {
-         return span.GetText().Substring(2);
-      }
-   }
+            return new Comment(
+                new SnapshotSpan(span.Snapshot, span.Start + tokenStart, span.Length - tokenStart),
+                commentType);
+        }
+    }
 }

@@ -1,36 +1,38 @@
-﻿using BetterComments.Options;
+﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+
+using BetterComments.Options;
 using Microsoft.VisualStudio.Text;
 
 namespace BetterComments.CommentsTagging
 {
-   internal class VBCommentParser : CommentParser
-   {
-      public override bool IsValidComment(SnapshotSpan span)
-      {
-         return span.GetText().Trim().StartsWith("'", OrdinalIgnoreCase);
-      }
+    /// <summary>
+    /// Parses Visual Basic single-line comments that start with <c>'</c>.
+    /// </summary>
+    internal sealed class VBCommentParser : CommentParser
+    {
+        /// <summary>Initialises the parser with the active settings instance.</summary>
+        public VBCommentParser(BetterCommentsSettings settings) : base(settings) { }
 
-      protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType)
-      {
-         var spanText = span.GetText().ToLower();
-         var startOffset = ParseHelper.SingleLineCommentStartIndex(spanText, "''", commentType);
+        /// <inheritdoc/>
+        public override bool IsValidComment(SnapshotSpan span)
+            => span.GetText().TrimStart().StartsWith("'", OrdinalIgnoreCase);
 
-         return new Comment(
-             new SnapshotSpan(span.Snapshot, span.Start + startOffset, span.Length - startOffset),
-             commentType);
-      }
+        /// <inheritdoc/>
+        protected override int GetDelimiterLength(SnapshotSpan span) => 1; // "'"
 
-      protected override CommentType GetCommentType(SnapshotSpan span)
-      {
-         if (Settings.StrikethroughDoubleComments && span.GetText().StartsWith("''", OrdinalIgnoreCase))
-            return CommentType.Crossed;
+        /// <inheritdoc/>
+        protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType)
+        {
+            var spanText   = span.GetText();
+            var tokenStart = ParseHelper.FindTokenStart(spanText, GetDelimiterLength(span));
 
-         return base.GetCommentType(span);
-      }
+            if (tokenStart < 0)
+                return new Comment(span, CommentType.Normal);
 
-      protected override string SpanTextWithoutCommentStarter(SnapshotSpan span)
-      {
-         return span.GetText().Substring(1);
-      }
-   }
+            return new Comment(
+                new SnapshotSpan(span.Snapshot, span.Start + tokenStart, span.Length - tokenStart),
+                commentType);
+        }
+    }
 }

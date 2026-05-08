@@ -1,34 +1,36 @@
-﻿using System.Collections.Generic;
+﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+
+using System.Collections.Generic;
 using System.Drawing.Text;
 using System.Linq;
 
 namespace BetterComments.Options
 {
-   public partial class OptionsGeneralPageControl
-   {
-      public OptionsGeneralPageControl()
-      {
-         DataContext = Settings.Instance;
+    /// <summary>
+    /// Code-behind for the Better Comments General options page control.
+    /// Binds to <see cref="BetterCommentsSettings.Instance"/> so that all XAML bindings resolve
+    /// against the live singleton settings object.
+    /// </summary>
+    public partial class OptionsGeneralPageControl
+    {
+        /// <summary>
+        /// Initialises the control, sets the data context to the settings singleton, and
+        /// populates the font family combo box with system fonts.
+        /// </summary>
+        public OptionsGeneralPageControl()
+        {
+            DataContext = BetterCommentsSettings.Instance;
+            InitializeComponent();
+            FontsComboBox.ItemsSource = GetInstalledFonts();
+        }
 
-         InitializeComponent();
-         FontsComboBox.ItemsSource = GetInstalledFonts();
-      }
-
-      private static IEnumerable<string> GetInstalledFonts()
-      {
-         IEnumerable<string> result;
-
-         using (var fonts = new InstalledFontCollection())
-         {
-            result = fonts.Families.Select(f => f.Name);
-         }
-
-         return result;
-      }
-
-      private void Hyperlink_Click(object sender, System.Windows.RoutedEventArgs e)
-      {
-         System.Diagnostics.Process.Start("https://docs.google.com/forms/d/e/1FAIpQLScRNeHI2q4yiaAzfXtGOidp-Tu8E6TEaKNPWnE4Cos_osHX9w/viewform?usp=sf_link");
-      }
-   }
+        private static IEnumerable<string> GetInstalledFonts()
+        {
+            using (var fonts = new InstalledFontCollection())
+            {
+                return fonts.Families.Select(f => f.Name).ToList();
+            }
+        }
+    }
 }

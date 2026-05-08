@@ -11,8 +11,23 @@ namespace BetterComments.Options
 {
    public static class SettingsStore
    {
-      private static readonly WritableSettingsStore store
-          = new ShellSettingsManager(ServiceProvider.GlobalProvider).GetWritableSettingsStore(SettingsScope.UserSettings);
+      // Lazily initialised so that ServiceProvider.GlobalProvider is only accessed on the UI
+      // thread, after the VS package has been loaded (satisfies VSTHRD010).
+      private static WritableSettingsStore _store;
+
+      private static WritableSettingsStore store
+      {
+         get
+         {
+            if (_store == null)
+            {
+               Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread();
+               _store = new ShellSettingsManager(ServiceProvider.GlobalProvider)
+                           .GetWritableSettingsStore(SettingsScope.UserSettings);
+            }
+            return _store;
+         }
+      }
 
       public static event Action SettingsSaved;
 

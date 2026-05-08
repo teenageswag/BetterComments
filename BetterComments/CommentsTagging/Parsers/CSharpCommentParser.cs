@@ -1,104 +1,98 @@
-﻿using BetterComments.Options;
+﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+
+using BetterComments.Options;
 using Microsoft.VisualStudio.Text;
 using System.Collections.Generic;
 
 namespace BetterComments.CommentsTagging
 {
-   internal class CSharpCommentParser : CommentParser
-   {
-      public override bool IsValidComment(SnapshotSpan span)
-      {
-         var txt = span.GetText();
+    /// <summary>
+    /// Parses C# single-line (<c>//</c>) and block (<c>/* … */</c>) comments.
+    ///
+    /// Single-line comments behave as before: the colour is applied from the token to the end
+    /// of the line (or just the keyword in keyword-only mode).
+    ///
+    /// Block comments support <em>per-section</em> colouring:
+    /// <code>
+    /// /*
+    ///  * err: this is red         ← Critical
+    ///  * still red                ← Critical (continuation)
+    ///  *                          ← empty → resets colour
+    ///  * normal comment           ← uncoloured
+    ///  * todo: this is blue       ← Ideas
+    ///  * warn: now orange         ← Warning
+    ///  * still orange             ← Warning (continuation)
+    ///  */
+    /// </code>
+    /// Javadoc-style leading asterisks (<c> * content</c>) are stripped before token detection.
+    /// </summary>
+    internal sealed class CSharpCommentParser : CommentParser
+    {
+        private const string Opener = "/*";
+        private const string Closer = "*/";
 
-         return txt.StartsWith("//", OrdinalIgnoreCase)
-             || txt.StartsWith("/*", OrdinalIgnoreCase);
-      }
+        /// <summary>Initialises the parser with the active settings instance.</summary>
+        public CSharpCommentParser(BetterCommentsSettings settings) : base(settings) { }
 
-      protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType)
-      {
-         var spanText = span.GetText().ToLower();
+        /// <inheritdoc/>
+        public override bool IsValidComment(SnapshotSpan span)
+        {
+            var txt = span.GetText();
+            return txt.StartsWith("//", OrdinalIgnoreCase)
+                || txt.StartsWith(Opener, OrdinalIgnoreCase);
+        }
 
-         var commentSpans = new List<SnapshotSpan>();
+        /// <inheritdoc/>
+        protected override int GetDelimiterLength(SnapshotSpan span) => 2;
 
-         var firstLineNumber = span.Snapshot.GetLineFromPosition(span.Start).LineNumber;
-         var lastLineNumber = span.Snapshot.GetLineFromPosition(span.End).LineNumber;
+        // ──────────────────────────────────────────────────────────────────────────────────────
+        //  Parse override — block comments bypass the base type-detection flow
+        // ──────────────────────────────────────────────────────────────────────────────────────
 
-         if (firstLineNumber == lastLineNumber) //! The comment span consists of a single line.
-         {
-            var startOffset = ParseHelper.SingleLineCommentStartIndex(spanText, "////", commentType);
-            var spanLength = 0;
-            if (spanText.StartsWith("//", OrdinalIgnoreCase))
-            {
-               spanLength = span.Length - startOffset;
-            }
-            else
-            {
-               var closerIndex = spanText.IndexOf("*/", OrdinalIgnoreCase);
-               spanLength = spanText.IndexOfFirstCharReverse(closerIndex - 1) - (startOffset - 1);
-            }
+        /// <inheritdoc/>
+        public override Comment Parse(SnapshotSpan span)
+        {
+            // Block comments need full multi-section analysis — skip the base-class single-type
+            // flow entirely.
+            if (span.GetText().StartsWith(Opener, OrdinalIgnoreCase))
+                return ParseBlockComment(span);
 
-            if (spanLength > 0)
-               commentSpans.Add(new SnapshotSpan(span.Snapshot, span.Start + startOffset, spanLength));
-         }
-         else //! The comment spans multiple lines
-         {
-            var startOffset = ParseHelper.DelimitedCommentStartIndex(spanText, commentType);
-            var token = Settings.Instance.GetTokenValue(commentType);
+            // Single-line "//" uses the standard base-class flow (type detect → SpecificParse).
+            return base.Parse(span);
+        }
 
-            for (var curr = firstLineNumber; curr <= lastLineNumber; curr++)
-            {
-               var line = span.Snapshot.GetLineFromLineNumber(curr);
-               var lineText = line.GetText().ToLower();
+        // ──────────────────────────────────────────────────────────────────────────────────────
+        //  SpecificParse — only reached for "//" single-line comments
+        // ──────────────────────────────────────────────────────────────────────────────────────
 
-               if (curr == firstLineNumber && lineText.Length > token.Length + 2) //! First line.
-               {
-                  var index = lineText.IndexOf("/*", OrdinalIgnoreCase);
-                  if (commentType == CommentType.Task)
-                  {
-                     startOffset = lineText.IndexOf(token, OrdinalIgnoreCase);
-                  }
-                  else
-                  {
-                     var indexOfToken = lineText.IndexOf(token, OrdinalIgnoreCase);
-                     startOffset = lineText.IndexOfFirstChar(indexOfToken + token.Length);
-                  }
+        /// <inheritdoc/>
+        protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType)
+        {
+            var spanText   = span.GetText();
+            var tokenStart = ParseHelper.FindTokenStart(spanText, GetDelimiterLength(span));
 
-                  commentSpans.Add(new SnapshotSpan(span.Snapshot, line.Start + startOffset, line.Length - startOffset));
-               }
-               else if (curr > firstLineNumber && curr < lastLineNumber) //! Line in the middle
-               {
-                  if (!string.IsNullOrWhiteSpace(lineText))
-                  {
-                     startOffset = lineText.IndexOfFirstChar();
-                     commentSpans.Add(new SnapshotSpan(span.Snapshot, line.Start + startOffset, line.Length - startOffset));
-                  }
-               }
-               //! Last line . Handle it ONLY if it is more than just a comment ender.
-               else if (lineText.Contains("*/") && !lineText.Trim().StartsWith("*/", OrdinalIgnoreCase))
-               {
-                  startOffset = lineText.IndexOfFirstChar();
-                  var closerIndex = lineText.IndexOf("*/", OrdinalIgnoreCase);
-                  var spanLength = lineText.IndexOfFirstCharReverse(closerIndex - 1) - startOffset + 1;
+            if (tokenStart < 0)
+                return new Comment(span, CommentType.Normal);
 
-                  commentSpans.Add(new SnapshotSpan(span.Snapshot, line.Start + startOffset, spanLength));
-               }
-            }
-         }
+            return new Comment(
+                new SnapshotSpan(span.Snapshot, span.Start + tokenStart, span.Length - tokenStart),
+                commentType);
+        }
 
-         return new Comment(commentSpans, commentType);
-      }
+        // ──────────────────────────────────────────────────────────────────────────────────────
+        //  Block comment parser
+        // ──────────────────────────────────────────────────────────────────────────────────────
 
-      protected override CommentType GetCommentType(SnapshotSpan span)
-      {
-         if (Settings.StrikethroughDoubleComments && span.GetText().StartsWith("////", OrdinalIgnoreCase))
-            return CommentType.Crossed;
+        private Comment ParseBlockComment(SnapshotSpan span)
+        {
+            var segments = ParseHelper.ParseBlockCommentSegments(
+                span,
+                Opener,
+                Closer,
+                ShouldHighlightKeywordOnly);
 
-         return base.GetCommentType(span);
-      }
-
-      protected override string SpanTextWithoutCommentStarter(SnapshotSpan span)
-      {
-         return span.GetText().Substring(2);
-      }
-   }
+            return new Comment(segments);
+        }
+    }
 }
