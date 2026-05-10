@@ -1,4 +1,4 @@
-﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Copyright (c) Omar Rwemi. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using BetterComments.Options;
@@ -22,35 +22,27 @@ namespace BetterComments.CommentsTagging
         /// <inheritdoc/>
         public override bool IsValidComment(SnapshotSpan span)
         {
-            var txt = span.GetText();
-            return !txt.Contains("\r\n")
-                && txt.Contains(Opener)
-                && txt.Contains(Closer);
+            // If the Visual Studio tagger classified it as a comment, it is valid.
+            return true;
         }
 
         /// <inheritdoc/>
         protected override int GetDelimiterLength(SnapshotSpan span) => Opener.Length; // 4
 
         /// <inheritdoc/>
+        public override Comment Parse(SnapshotSpan span)
+        {
+            // Markup doesn't have // style comments, only <!-- -->
+            var fullSpan = ParseHelper.ExpandToFullBlockComment(span, Opener, Closer);
+            return new Comment(ParseHelper.ParseBlockCommentSegments(
+                fullSpan, Opener, Closer, ShouldHighlightKeywordOnly));
+        }
+
+        /// <inheritdoc/>
         protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType)
         {
-            var spanText   = span.GetText();
-            var delimLen   = GetDelimiterLength(span);
-            var tokenStart = ParseHelper.FindTokenStart(spanText, delimLen);
-
-            if (tokenStart < 0)
-                return new Comment(span, CommentType.Normal);
-
-            var closerIdx  = spanText.IndexOf(Closer, OrdinalIgnoreCase);
-            var lastChar   = spanText.IndexOfFirstCharReverse(closerIdx - 1);
-            var spanLength = lastChar >= tokenStart ? lastChar - tokenStart + 1 : 0;
-
-            if (spanLength <= 0)
-                return new Comment(span, CommentType.Normal);
-
-            return new Comment(
-                new SnapshotSpan(span.Snapshot, span.Start + tokenStart, spanLength),
-                commentType);
+            // This is only used for the base Parse logic, which we override.
+            return new Comment(span, CommentType.Normal);
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Copyright (c) Omar Rwemi. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using BetterComments.Options;
@@ -51,6 +51,8 @@ namespace BetterComments.CommentsTagging
 
             if (parser == null) return results; // Unsupported content type
 
+            var yieldedSpans = new HashSet<SnapshotSpan>();
+
             foreach (var tagSpan in tagAggregator.GetTags(spans)
                                                   .Where(m => m.Tag.IsComment() && !m.Tag.IsXmlDoc()))
             {
@@ -58,7 +60,14 @@ namespace BetterComments.CommentsTagging
                 {
                     try
                     {
-                        results.AddRange(CreateTagSpans(parser.Parse(span)));
+                        var comment = parser.Parse(span);
+                        foreach (var seg in comment.Segments)
+                        {
+                            if (seg.Type != CommentType.Normal && yieldedSpans.Add(seg.Span))
+                            {
+                                results.Add(new TagSpan<ClassificationTag>(seg.Span, CreateTag(seg.Type)));
+                            }
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -73,15 +82,6 @@ namespace BetterComments.CommentsTagging
         // ──────────────────────────────────────────────────────────────────────────────────────
         //  Private helpers
         // ──────────────────────────────────────────────────────────────────────────────────────
-
-        private IEnumerable<TagSpan<ClassificationTag>> CreateTagSpans(Comment comment)
-        {
-            foreach (var seg in comment.Segments)
-            {
-                if (seg.Type != CommentType.Normal)
-                    yield return new TagSpan<ClassificationTag>(seg.Span, CreateTag(seg.Type));
-            }
-        }
 
         private ClassificationTag CreateTag(CommentType type)
         {

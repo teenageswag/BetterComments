@@ -1,4 +1,4 @@
-﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Copyright (c) Omar Rwemi. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using Microsoft.VisualStudio.Text;
@@ -37,7 +37,7 @@ namespace BetterComments.CommentsTagging
             if (TokenMatcher.Match(trimmed) == CommentType.Normal) return -1;
 
             var leadingSpace = afterDelim.Length - trimmed.Length;
-            return delimLen + leadingSpace;
+            return delimLen + leadingSpace + TokenMatcher.FindTokenIndex(trimmed);
         }
 
         /// <summary>
@@ -75,7 +75,7 @@ namespace BetterComments.CommentsTagging
         /// Predicate that returns <c>true</c> when only the token keyword should be highlighted
         /// (not the full line) for a given <see cref="CommentType"/>.
         /// </param>
-        public static List<CommentSegment> ParseBlockCommentSegments(
+        public static IReadOnlyList<CommentSegment> ParseBlockCommentSegments(
             SnapshotSpan span,
             string opener,
             string closer,
@@ -128,25 +128,30 @@ namespace BetterComments.CommentsTagging
                     currentType = matchedType;
 
                     int leadingSpace = rawContent.Length - trimmedForTok.Length;
-                    int tokenStart   = contentStart + leadingSpace;
+                    int tokenIndex   = TokenMatcher.FindTokenIndex(trimmedForTok);
+                    int tokenStart   = contentStart + leadingSpace + Math.Max(0, tokenIndex);
 
                     if (isKeywordOnly(matchedType))
                     {
                         // Keyword-only mode: highlight just the token word.
                         string token = TokenMatcher.GetMatchedToken(trimmedForTok);
                         if (token != null)
+                        {
                             segments.Add(new CommentSegment(
                                 new SnapshotSpan(snapshot, line.Start + tokenStart, token.Length),
                                 matchedType));
+                        }
                     }
                     else
                     {
                         // Full-line mode: highlight from token to end of usable content.
                         int len = contentEnd - tokenStart;
                         if (len > 0)
+                        {
                             segments.Add(new CommentSegment(
                                 new SnapshotSpan(snapshot, line.Start + tokenStart, len),
                                 matchedType));
+                        }
                     }
                 }
                 else if (currentType != CommentType.Normal)
@@ -158,9 +163,11 @@ namespace BetterComments.CommentsTagging
                         if (firstChar < 0) firstChar = contentStart;
                         int len = contentEnd - firstChar;
                         if (len > 0)
+                        {
                             segments.Add(new CommentSegment(
                                 new SnapshotSpan(snapshot, line.Start + firstChar, len),
                                 currentType));
+                        }
                     }
                     // In keyword-only mode continuation lines are not highlighted.
                 }
@@ -168,6 +175,58 @@ namespace BetterComments.CommentsTagging
             }
 
             return segments;
+        }
+
+        /// <summary>
+        /// Expands a given span to the full block comment boundaries.
+        /// </summary>
+        public static SnapshotSpan ExpandToFullBlockComment(SnapshotSpan span, string opener, string closer)
+        {
+            var snapshot = span.Snapshot;
+            
+            // Scan backward for opener
+            int start = span.Start;
+            while (start >= 0)
+            {
+                if (start <= snapshot.Length - opener.Length)
+                {
+                    bool found = true;
+                    for (int i = 0; i < opener.Length; i++)
+                    {
+                        if (snapshot[start + i] != opener[i])
+                        {
+                            found = false;
+                            break;
+                        }
+                    }
+                    if (found) break;
+                }
+                start--;
+            }
+            if (start < 0) start = span.Start;
+
+            // Scan forward for closer
+            int end = span.End;
+            while (end <= snapshot.Length)
+            {
+                if (end >= closer.Length)
+                {
+                    bool found = true;
+                    for (int i = 0; i < closer.Length; i++)
+                    {
+                        if (snapshot[end - closer.Length + i] != closer[i])
+                        {
+                            found = false;
+                            break;
+                        }
+                    }
+                    if (found) break;
+                }
+                end++;
+            }
+            if (end > snapshot.Length) end = snapshot.Length;
+
+            return new SnapshotSpan(snapshot, start, end - start);
         }
 
         // ──────────────────────────────────────────────────────────────────────────────────────

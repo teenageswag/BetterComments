@@ -1,4 +1,4 @@
-﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Copyright (c) Omar Rwemi. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using BetterComments.Options;
@@ -22,9 +22,8 @@ namespace BetterComments.CommentsTagging
         /// <inheritdoc/>
         public override bool IsValidComment(SnapshotSpan span)
         {
-            var txt = span.GetText();
-            return txt.StartsWith("//", OrdinalIgnoreCase)
-                || txt.StartsWith(Opener, OrdinalIgnoreCase);
+            // If the Visual Studio tagger classified it as a comment, it is valid.
+            return true;
         }
 
         /// <inheritdoc/>
@@ -33,11 +32,19 @@ namespace BetterComments.CommentsTagging
         /// <inheritdoc/>
         public override Comment Parse(SnapshotSpan span)
         {
-            if (span.GetText().StartsWith(Opener, OrdinalIgnoreCase))
-                return new Comment(ParseHelper.ParseBlockCommentSegments(
-                    span, Opener, Closer, ShouldHighlightKeywordOnly));
+            var txt = span.GetText();
+            if (txt.StartsWith("//", System.StringComparison.OrdinalIgnoreCase))
+            {
+                // Single-line "//" uses the standard base-class flow (type detect → SpecificParse).
+                return base.Parse(span);
+            }
 
-            return base.Parse(span);
+            // It's a block comment (or a continuation line of one).
+            // Visual Studio sometimes yields line-by-line classification spans for block comments.
+            // We expand the span to the full /* ... */ block to process it contextually.
+            var fullSpan = ParseHelper.ExpandToFullBlockComment(span, Opener, Closer);
+            return new Comment(ParseHelper.ParseBlockCommentSegments(
+                fullSpan, Opener, Closer, ShouldHighlightKeywordOnly));
         }
 
         /// <inheritdoc/>

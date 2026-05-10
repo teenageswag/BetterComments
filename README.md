@@ -1,127 +1,53 @@
-- **Branch vs16 :** VS2015, VS2017, and VS2019 on single vsix.
-- **Branch vs17 :** VS2022 only.
----------------------------------------
+# Better Comments for Visual Studio 2026
 
+**Better Comments** is a Visual Studio extension that helps you create human-readable, categorized comments. This version features a high-performance parsing engine inspired by popular VSCode extensions.
 
+## 🚀 Key Features
 
-# Better Comments
-**Better Comments** is a Visual Studio extension that gives you the ability to customize the font and opacity of your comments independently of the editor's font settings. 
-It also adds four additional comment classifications, each classification with its own customizable foreground. 
+- **Multi-line Support:** Highlight entire blocks of code in `/* ... */`, `<!-- ... -->`, or `(* ... *)`.
+- **VSCode-Style Parsing:** Uses the same tag detection logic as VSCode (supports tags anywhere in the line, with optional parameters).
+- **Smooth Integration:** Works across C#, C++, JavaScript, TypeScript, Python, F#, VB, and Markup (HTML/XML).
+- **Deduplicated Rendering:** Optimized to prevent overlapping tags and flickering in the editor.
 
+## 💡 How to Use
 
+Start your comment section with a tag followed by a colon. Tags are **case-insensitive**.
 
-<!-- Update the VS Gallery link after you upload the VSIX-->
-Download this extension from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=OmarRwemi.BetterCommentsVS2022).
+### 🔥 Critical (Critical)
+- `ERR:`, `ERROR:`, `FIX:`, `FIXME:`
+- *Example:* `// ERR: This logic is broken`
 
----------------------------------------
+### ⚠️ Warning (Warning)
+- `WARN:`, `WARNING:`
+- *Example:* `/* WARNING: Use with caution */`
 
-## Features
+### 💡 Tasks & Ideas (Ideas)
+- `TODO:`, `IDEA:`, `OPTIMIZE:`
+- *Example:* `// TODO: Refactor this method`
 
-- Additional comment classifications. Important, Question, Task, and Crossed. 
-- Customizable foreground for each comment classification.
-- Customize the font settings and opacity of your comments.
-- Works with C#, F#, VB.NET, C/C++, JavaScript, Python, HTML, and XAML.
+### ℹ️ Information (Info)
+- `NOTE:`, `INFO:`
+- *Example:* `<!-- INFO: This is a shared component -->`
 
-<br>
+### 🔧 Parameters
+You can include optional parameters in parentheses:
+- *Example:* `// TODO(Artem): Finish this`
 
-### Comment Classifications
+## ⚙️ Configuration
 
-- Use '!' for Important.
-- Use '?' for Question.
-- Use "Todo" (Case ignored) for Task.
-- Use 'x', 'X', or double comment for strikethrough (Crossed).
+Customize the extension via **Tools -> Options -> Better Comments**:
+- **Font & Size:** Offset the comment font size relative to the editor.
+- **Opacity & Italics:** Make your comments subtle or prominent.
+- **Highlight Mode:** Choose between highlighting the entire line or just the keyword.
 
+### Colors & Styling
+To customize the colors of each category:
+1. Go to **Tools -> Options -> Environment -> Fonts and Colors**.
+2. Select **Text Editor** in the dropdown.
+3. Find items starting with `Better Comments` (e.g., `Better Comments - Critical`).
 
-Or you can use your own custom tokens:
+## 🤝 Contribute
+Contributions are welcome! Check out our [Contribution Guidelines](CONTRIBUTING.md).
 
-![Sample1](screenshots/CustomTokensExample.png)
-
-![Sample1](screenshots/CustomTokensOptionsPage.png)
-
-
-
-
-C#, F#, C/C++, and JavaScript 
-
-![Sample1](screenshots/ClassificationC.png)
-
-VB.NET 
-
-![Sample1](screenshots/ClassificationVB.png)
-
-Python 
-
-![Sample1](screenshots/ClassificationPython.png)
-
-HTML/XAML (**Works only with single-line comments**) 
-
-![Sample1](screenshots/ClassificationMarkup.png)
-
-Multiline delimited comments (**Works only in C#**).
-
-![Sample1](screenshots/ClassificationMultilineCS.png)
-
-Single-line delimited comments (**Works in C#, F#, C/C++, and JavaScript**)
-
-![Sample1](screenshots/ClassificationDelimited.png)
-
-<br>
-
-### Custom Foreground Color for each Classification 
-
-- You can set each comment classification foreground color to whatever you like.
-
-- You can also set a particular comment classification font weight to bold.
-
-   Go to Tools => Options => Fonts and Colors
-
-
-![Sample1](screenshots/CommentsColors.png)
-
-<br>
-
-### Independent Font Settings
-
-- You can change the comments font settings without affecting the editor's font settings.
-
-   Go to Tools -> Options -> Better Comments -> Font Options
-
-![Options](screenshots/Options.png)
-
-- You can use whatever font you like.
-
-![Options](screenshots/FontSample.png)
-
-- You can offset the comment font size relative to the font size of the editor. Make it larger or smaller.
-
-![Options](screenshots/SizeSample.png)
-
-- You can italicize comments.
-
-![Options](screenshots/ItalicSample.png)
-
-- You can control the comments opacity.
-
-![Options](screenshots/OpacitySample.png)
-
-- You can choose to color the "Todo" keyword only instead of the whole task comment.
-
-![Options](screenshots/HighlightOnlyKeywordSample.png)
-
-- You can choose to underline the important comments 
-
-![Options](screenshots/UnderlineSample.png)
-
-
-<br>
-
-## Contribute
-- Check out the [contribution guidelines](CONTRIBUTING.md)
-if you want to contribute to this project.
-
-- See the [changelog](CHANGELOG.md) for changes and roadmap.
-
-<br>
-
-## License
-[Apache 2.0](LICENSE)
+## 📄 License
+Licensed under the [Apache 2.0](LICENSE) License.
