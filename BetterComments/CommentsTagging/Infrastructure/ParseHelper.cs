@@ -34,10 +34,12 @@ namespace BetterComments.CommentsTagging
             var trimmed    = afterDelim.TrimStart();
 
             if (string.IsNullOrEmpty(trimmed))                     return -1;
-            if (TokenMatcher.Match(trimmed) == CommentType.Normal) return -1;
+            
+            var matchResult = TokenMatcher.Match(trimmed);
+            if (matchResult.Type == CommentType.Normal) return -1;
 
             var leadingSpace = afterDelim.Length - trimmed.Length;
-            return delimLen + leadingSpace + TokenMatcher.FindTokenIndex(trimmed);
+            return delimLen + leadingSpace + matchResult.Index;
         }
 
         /// <summary>
@@ -48,7 +50,7 @@ namespace BetterComments.CommentsTagging
             if (spanText == null || delimLen >= spanText.Length) return null;
 
             var afterDelim = spanText.Substring(delimLen);
-            return TokenMatcher.GetMatchedToken(afterDelim.TrimStart());
+            return TokenMatcher.Match(afterDelim.TrimStart()).Token;
         }
 
         // ──────────────────────────────────────────────────────────────────────────────────────
@@ -120,27 +122,22 @@ namespace BetterComments.CommentsTagging
                 // ── Token detection ───────────────────────────────────────────────────────
                 string rawContent    = lineText.Substring(contentStart, contentLen);
                 string trimmedForTok = rawContent.TrimStart();
-                var    matchedType   = TokenMatcher.Match(trimmedForTok);
+                var    matchResult   = TokenMatcher.Match(trimmedForTok);
 
-                if (matchedType != CommentType.Normal)
+                if (matchResult.Type != CommentType.Normal)
                 {
                     // Start of a new classified section.
-                    currentType = matchedType;
+                    currentType = matchResult.Type;
 
                     int leadingSpace = rawContent.Length - trimmedForTok.Length;
-                    int tokenIndex   = TokenMatcher.FindTokenIndex(trimmedForTok);
-                    int tokenStart   = contentStart + leadingSpace + Math.Max(0, tokenIndex);
+                    int tokenStart   = contentStart + leadingSpace + matchResult.Index;
 
-                    if (isKeywordOnly(matchedType))
+                    if (isKeywordOnly(matchResult.Type))
                     {
                         // Keyword-only mode: highlight just the token word.
-                        string token = TokenMatcher.GetMatchedToken(trimmedForTok);
-                        if (token != null)
-                        {
-                            segments.Add(new CommentSegment(
-                                new SnapshotSpan(snapshot, line.Start + tokenStart, token.Length),
-                                matchedType));
-                        }
+                        segments.Add(new CommentSegment(
+                            new SnapshotSpan(snapshot, line.Start + tokenStart, matchResult.Token.Length),
+                            matchResult.Type));
                     }
                     else
                     {
@@ -150,7 +147,7 @@ namespace BetterComments.CommentsTagging
                         {
                             segments.Add(new CommentSegment(
                                 new SnapshotSpan(snapshot, line.Start + tokenStart, len),
-                                matchedType));
+                                matchResult.Type));
                         }
                     }
                 }
@@ -183,48 +180,62 @@ namespace BetterComments.CommentsTagging
         public static SnapshotSpan ExpandToFullBlockComment(SnapshotSpan span, string opener, string closer)
         {
             var snapshot = span.Snapshot;
-            
-            // Scan backward for opener
             int start = span.Start;
-            while (start >= 0)
-            {
-                if (start <= snapshot.Length - opener.Length)
-                {
-                    bool found = true;
-                    for (int i = 0; i < opener.Length; i++)
-                    {
-                        if (snapshot[start + i] != opener[i])
-                        {
-                            found = false;
-                            break;
-                        }
-                    }
-                    if (found) break;
-                }
-                start--;
-            }
-            if (start < 0) start = span.Start;
-
-            // Scan forward for closer
             int end = span.End;
-            while (end <= snapshot.Length)
+
+            // ── Backward scan for opener ──────────────────────────────────────────────────
+            int startLineNo = snapshot.GetLineFromPosition(span.Start).LineNumber;
+            for (int lineNo = startLineNo; lineNo >= 0; lineNo--)
             {
-                if (end >= closer.Length)
+                var line = snapshot.GetLineFromLineNumber(lineNo);
+                var text = line.GetText();
+                int limit = (lineNo == startLineNo) ? (span.Start - line.Start) : text.Length;
+
+                int searchIdx = limit - opener.Length;
+                bool foundOpener = false;
+
+                while (searchIdx >= 0)
                 {
-                    bool found = true;
-                    for (int i = 0; i < closer.Length; i++)
+                    int openerIdx = text.LastIndexOf(opener, searchIdx, StringComparison.OrdinalIgnoreCase);
+                    if (openerIdx < 0)
+                        break;
+
+                    // Check if there is a closer between openerIdx + opener.Length and limit.
+                    int closerIdx = text.IndexOf(closer, openerIdx + opener.Length, StringComparison.OrdinalIgnoreCase);
+                    if (closerIdx >= 0 && closerIdx < limit)
                     {
-                        if (snapshot[end - closer.Length + i] != closer[i])
-                        {
-                            found = false;
-                            break;
-                        }
+                        // This opener was closed before our search limit, so keep searching backward.
+                        searchIdx = openerIdx - 1;
                     }
-                    if (found) break;
+                    else
+                    {
+                        // Found the active opener!
+                        start = line.Start + openerIdx;
+                        foundOpener = true;
+                        break;
+                    }
                 }
-                end++;
+
+                if (foundOpener)
+                    break;
             }
-            if (end > snapshot.Length) end = snapshot.Length;
+
+            // ── Forward scan for closer ───────────────────────────────────────────────────
+            int endLineNo = snapshot.GetLineFromPosition(span.End).LineNumber;
+            int lineCount = snapshot.LineCount;
+            for (int lineNo = endLineNo; lineNo < lineCount; lineNo++)
+            {
+                var line = snapshot.GetLineFromLineNumber(lineNo);
+                var text = line.GetText();
+                int searchStart = (lineNo == endLineNo) ? Math.Max(0, span.End - line.Start) : 0;
+
+                int closerIdx = text.IndexOf(closer, searchStart, StringComparison.OrdinalIgnoreCase);
+                if (closerIdx >= 0)
+                {
+                    end = line.Start + closerIdx + closer.Length;
+                    break;
+                }
+            }
 
             return new SnapshotSpan(snapshot, start, end - start);
         }

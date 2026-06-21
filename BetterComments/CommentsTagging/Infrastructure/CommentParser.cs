@@ -1,4 +1,4 @@
-﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Copyright (c) Omar Rwemi. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using BetterComments.Options;
@@ -40,26 +40,27 @@ namespace BetterComments.CommentsTagging
         /// <inheritdoc/>
         public virtual Comment Parse(SnapshotSpan span)
         {
-            var commentType = GetCommentType(span);
+            var raw = span.GetText();
+            var delLen = GetDelimiterLength(span);
+            var content = delLen < raw.Length ? raw.Substring(delLen) : string.Empty;
+            var trimmedContent = content.TrimStart();
+            var leadingSpace = content.Length - trimmedContent.Length;
 
-            if (commentType == CommentType.Normal)
+            var matchResult = TokenMatcher.Match(trimmedContent);
+
+            if (matchResult.Type == CommentType.Normal)
                 return new Comment(span, CommentType.Normal);
 
             // ── Keyword-only highlight ────────────────────────────────────────────────────────
-            if (ShouldHighlightKeywordOnly(commentType))
+            if (ShouldHighlightKeywordOnly(matchResult.Type))
             {
-                var raw      = span.GetText();
-                var delimLen = GetDelimiterLength(span);
-                var tokStart = ParseHelper.FindTokenStart(raw, delimLen);
-                var token    = tokStart >= 0 ? ParseHelper.GetMatchedToken(raw, delimLen) : null;
-
-                if (token != null)
-                    return new Comment(
-                        new SnapshotSpan(span.Snapshot, span.Start + tokStart, token.Length),
-                        commentType);
+                var tokStart = delLen + leadingSpace + matchResult.Index;
+                return new Comment(
+                    new SnapshotSpan(span.Snapshot, span.Start + tokStart, matchResult.Token.Length),
+                    matchResult.Type);
             }
 
-            return SpecificParse(span, commentType);
+            return SpecificParse(span, matchResult.Type);
         }
 
         // ──────────────────────────────────────────────────────────────────────────────────────
@@ -75,7 +76,7 @@ namespace BetterComments.CommentsTagging
             var raw     = span.GetText();
             var delLen  = GetDelimiterLength(span);
             var content = delLen < raw.Length ? raw.Substring(delLen).TrimStart() : string.Empty;
-            return TokenMatcher.Match(content);
+            return TokenMatcher.Match(content).Type;
         }
 
         /// <summary>

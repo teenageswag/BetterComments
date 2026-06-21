@@ -2,6 +2,22 @@ using System.Text.RegularExpressions;
 
 namespace BetterComments.CommentsTagging
 {
+    internal readonly struct TokenMatchResult
+    {
+        public static readonly TokenMatchResult Normal = new TokenMatchResult(CommentType.Normal, -1, null);
+
+        public CommentType Type { get; }
+        public int Index { get; }
+        public string Token { get; }
+
+        public TokenMatchResult(CommentType type, int index, string token)
+        {
+            Type = type;
+            Index = index;
+            Token = token;
+        }
+    }
+
     internal static class TokenMatcher
     {
         // Replicating logic from example_src (TS) tagParser.ts
@@ -10,51 +26,40 @@ namespace BetterComments.CommentsTagging
             @"(^|[^\w])(ERROR|ERR|FIX|FIXME|WARNING|WARN|TODO|IDEA|OPTIMIZE|NOTE|INFO)\s*(\([^\r\n)]*\))?\s*:",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        public static CommentType Match(string text)
+        public static TokenMatchResult Match(string text)
         {
+            if (string.IsNullOrEmpty(text))
+                return TokenMatchResult.Normal;
+
             var match = TagRegex.Match(text);
             if (!match.Success)
             {
-                return CommentType.Normal;
+                return TokenMatchResult.Normal;
             }
 
             string tag = match.Groups[2].Value.ToUpperInvariant();
+            CommentType type;
             switch (tag)
             {
                 case "ERROR": case "ERR": case "FIX": case "FIXME":
-                    return CommentType.Critical;
+                    type = CommentType.Critical;
+                    break;
                 case "WARNING": case "WARN":
-                    return CommentType.Warning;
+                    type = CommentType.Warning;
+                    break;
                 case "TODO": case "IDEA": case "OPTIMIZE":
-                    return CommentType.Ideas;
+                    type = CommentType.Ideas;
+                    break;
                 case "NOTE": case "INFO":
-                    return CommentType.Info;
+                    type = CommentType.Info;
+                    break;
                 default:
-                    return CommentType.Normal;
+                    return TokenMatchResult.Normal;
             }
-        }
 
-        // Returns the match starting index
-        public static int FindTokenIndex(string text)
-        {
-            var match = TagRegex.Match(text);
-            if (!match.Success) return -1;
-            
-            // match.Groups[1] is the (^|[^\w]) part
-            return match.Index + match.Groups[1].Length;
-        }
-
-        // Returns the matched part, including the trailing colon and optional params.
-        public static string GetMatchedToken(string text)
-        {
-            var match = TagRegex.Match(text);
-            if (!match.Success) return null;
-            
-            // We return the actual tag part: (TAG)(\(param\))?:
-            // This is matched by Groups[2], Groups[3], etc., but we can just substring
-            // from FindTokenIndex
-            int start = FindTokenIndex(text);
-            return text.Substring(start, match.Length - (start - match.Index));
+            int index = match.Index + match.Groups[1].Length;
+            string token = text.Substring(index, match.Length - (index - match.Index));
+            return new TokenMatchResult(type, index, token);
         }
     }
 }

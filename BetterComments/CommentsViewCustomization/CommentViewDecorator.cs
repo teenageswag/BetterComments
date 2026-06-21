@@ -1,4 +1,4 @@
-﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Copyright (c) Omar Rwemi. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using BetterComments.Options;
@@ -71,6 +71,7 @@ namespace BetterComments.CommentsViewCustomization
             IClassificationTypeRegistryService service)
         {
             view.GotAggregateFocus += OnViewGotFocus;
+            view.Closed += OnViewClosed;
             SettingsStore.SettingsSaved += OnSettingsSaved;
 
             formatMap  = map;
@@ -94,6 +95,16 @@ namespace BetterComments.CommentsViewCustomization
                 view.GotAggregateFocus -= OnViewGotFocus;
 
             if (!isDecorating) Decorate();
+        }
+
+        private void OnViewClosed(object sender, EventArgs e)
+        {
+            if (sender is ITextView view)
+            {
+                view.GotAggregateFocus -= OnViewGotFocus;
+                view.Closed -= OnViewClosed;
+            }
+            SettingsStore.SettingsSaved -= OnSettingsSaved;
         }
 
         // ──────────────────────────────────────────────────────────────────────────────────────

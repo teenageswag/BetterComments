@@ -1,4 +1,4 @@
-﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Copyright (c) Omar Rwemi. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using Microsoft.VisualStudio.Text;
@@ -39,11 +39,7 @@ namespace BetterComments.CommentsTagging
 
             Debug.WriteLine("[BetterComments] CommentTagger created.");
 
-            // Use GetOrCreateSingletonProperty so that only one tagger is created per view,
-            // preventing duplicate classification tags when a buffer is shared across views.
-            return textView.Properties
-                           .GetOrCreateSingletonProperty(() =>
-                               new CommentTagger(ClassificationRegistry, tagAggregator)) as ITagger<T>;
+            return new CommentTagger(ClassificationRegistry, tagAggregator) as ITagger<T>;
         }
     }
 }
