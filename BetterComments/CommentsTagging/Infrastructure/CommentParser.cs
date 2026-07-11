@@ -57,10 +57,11 @@ namespace BetterComments.CommentsTagging
                 var tokStart = delLen + leadingSpace + matchResult.Index;
                 return new Comment(
                     new SnapshotSpan(span.Snapshot, span.Start + tokStart, matchResult.Token.Length),
-                    matchResult.Type);
+                    matchResult.Type,
+                    matchResult.CustomTagId);
             }
 
-            return SpecificParse(span, matchResult.Type);
+            return SpecificParse(span, matchResult.Type, matchResult.CustomTagId);
         }
 
         // ──────────────────────────────────────────────────────────────────────────────────────
@@ -90,7 +91,7 @@ namespace BetterComments.CommentsTagging
         /// that the span is not <see cref="CommentType.Normal"/> and keyword-only mode is inactive.
         /// Responsible for computing accurate sub-span positions (handles multi-line blocks, etc.).
         /// </summary>
-        protected abstract Comment SpecificParse(SnapshotSpan span, CommentType commentType);
+        protected abstract Comment SpecificParse(SnapshotSpan span, CommentType commentType, string customTagId);
 
         // ──────────────────────────────────────────────────────────────────────────────────────
         //  Private helpers
@@ -104,10 +105,10 @@ namespace BetterComments.CommentsTagging
         {
             switch (type)
             {
-                case CommentType.Critical: return Settings.CriticalHighlightKeywordOnly;
-                case CommentType.Warning:  return Settings.WarningHighlightKeywordOnly;
-                case CommentType.Ideas:    return Settings.IdeasHighlightKeywordOnly;
-                case CommentType.Info:     return Settings.InfoHighlightKeywordOnly;
+                case CommentType.Critical: return Settings.Critical.HighlightKeywordOnly;
+                case CommentType.Warning:  return Settings.Warning.HighlightKeywordOnly;
+                case CommentType.Ideas:    return Settings.Ideas.HighlightKeywordOnly;
+                case CommentType.Info:     return Settings.Info.HighlightKeywordOnly;
                 default:                   return false;
             }
         }

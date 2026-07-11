@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.ComponentModel;
 
 namespace BetterComments.Options
@@ -17,24 +18,22 @@ namespace BetterComments.Options
             opacity = 1.0;
             italic = false;
 
-            criticalBold = true;
-            criticalUnderline = false;
-            criticalHighlightKeywordOnly = false;
+            critical = new CommentTypeSettings(defaultBold: true);
+            warning = new CommentTypeSettings();
+            ideas = new CommentTypeSettings();
+            info = new CommentTypeSettings();
 
-            warningBold = false;
-            warningUnderline = false;
-            warningHighlightKeywordOnly = false;
-
-            ideasBold = false;
-            ideasUnderline = false;
-            ideasHighlightKeywordOnly = false;
-
-            infoBold = false;
-            infoUnderline = false;
-            infoHighlightKeywordOnly = false;
+            customTags = new CustomTagSettings();
+            customTags.TagsChanged += OnCustomTagsChanged;
 
             // Load saved settings from VS store if they exist
             SettingsStore.LoadSettings(this);
+        }
+
+        private void OnCustomTagsChanged()
+        {
+            // Update TokenMatcher with new custom tags
+            CommentsTagging.TokenMatcher.UpdateCustomTags(customTags.CustomTags);
         }
 
         // Global Settings
@@ -70,104 +69,120 @@ namespace BetterComments.Options
             set => SetField(ref italic, value);
         }
 
-        // Critical Settings
-        private bool criticalBold;
+        // Per-type settings
+        private CommentTypeSettings critical;
+        public CommentTypeSettings Critical => critical;
+
+        private CommentTypeSettings warning;
+        public CommentTypeSettings Warning => warning;
+
+        private CommentTypeSettings ideas;
+        public CommentTypeSettings Ideas => ideas;
+
+        private CommentTypeSettings info;
+        public CommentTypeSettings Info => info;
+
+        // Wrapper properties for backwards compatibility with existing UI bindings
         [Setting]
         public bool CriticalBold
         {
-            get => criticalBold;
-            set => SetField(ref criticalBold, value);
+            get => critical.Bold;
+            set => critical.Bold = value;
         }
 
-        private bool criticalUnderline;
         [Setting]
         public bool CriticalUnderline
         {
-            get => criticalUnderline;
-            set => SetField(ref criticalUnderline, value);
+            get => critical.Underline;
+            set => critical.Underline = value;
         }
 
-        private bool criticalHighlightKeywordOnly;
         [Setting]
         public bool CriticalHighlightKeywordOnly
         {
-            get => criticalHighlightKeywordOnly;
-            set => SetField(ref criticalHighlightKeywordOnly, value);
+            get => critical.HighlightKeywordOnly;
+            set => critical.HighlightKeywordOnly = value;
         }
 
-        // Warning Settings
-        private bool warningBold;
         [Setting]
         public bool WarningBold
         {
-            get => warningBold;
-            set => SetField(ref warningBold, value);
+            get => warning.Bold;
+            set => warning.Bold = value;
         }
 
-        private bool warningUnderline;
         [Setting]
         public bool WarningUnderline
         {
-            get => warningUnderline;
-            set => SetField(ref warningUnderline, value);
+            get => warning.Underline;
+            set => warning.Underline = value;
         }
 
-        private bool warningHighlightKeywordOnly;
         [Setting]
         public bool WarningHighlightKeywordOnly
         {
-            get => warningHighlightKeywordOnly;
-            set => SetField(ref warningHighlightKeywordOnly, value);
+            get => warning.HighlightKeywordOnly;
+            set => warning.HighlightKeywordOnly = value;
         }
 
-        // Ideas Settings
-        private bool ideasBold;
         [Setting]
         public bool IdeasBold
         {
-            get => ideasBold;
-            set => SetField(ref ideasBold, value);
+            get => ideas.Bold;
+            set => ideas.Bold = value;
         }
 
-        private bool ideasUnderline;
         [Setting]
         public bool IdeasUnderline
         {
-            get => ideasUnderline;
-            set => SetField(ref ideasUnderline, value);
+            get => ideas.Underline;
+            set => ideas.Underline = value;
         }
 
-        private bool ideasHighlightKeywordOnly;
         [Setting]
         public bool IdeasHighlightKeywordOnly
         {
-            get => ideasHighlightKeywordOnly;
-            set => SetField(ref ideasHighlightKeywordOnly, value);
+            get => ideas.HighlightKeywordOnly;
+            set => ideas.HighlightKeywordOnly = value;
         }
 
-        // Info Settings
-        private bool infoBold;
         [Setting]
         public bool InfoBold
         {
-            get => infoBold;
-            set => SetField(ref infoBold, value);
+            get => info.Bold;
+            set => info.Bold = value;
         }
 
-        private bool infoUnderline;
         [Setting]
         public bool InfoUnderline
         {
-            get => infoUnderline;
-            set => SetField(ref infoUnderline, value);
+            get => info.Underline;
+            set => info.Underline = value;
         }
 
-        private bool infoHighlightKeywordOnly;
         [Setting]
         public bool InfoHighlightKeywordOnly
         {
-            get => infoHighlightKeywordOnly;
-            set => SetField(ref infoHighlightKeywordOnly, value);
+            get => info.HighlightKeywordOnly;
+            set => info.HighlightKeywordOnly = value;
+        }
+
+        // Custom tags settings
+        private CustomTagSettings customTags;
+        internal CustomTagSettings CustomTags => customTags;
+
+        /// <summary>
+        /// Gets or sets the custom tags for serialization.
+        /// </summary>
+        [Setting]
+        internal List<CustomTagDefinition> CustomTagsList
+        {
+            get => customTags.ToList();
+            set
+            {
+                customTags.LoadFrom(value);
+                CommentsTagging.TokenMatcher.UpdateCustomTags(customTags.CustomTags);
+            }
         }
     }
 }

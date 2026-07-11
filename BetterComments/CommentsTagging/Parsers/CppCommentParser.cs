@@ -48,7 +48,7 @@ namespace BetterComments.CommentsTagging
         }
 
         /// <inheritdoc/>
-        protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType)
+        protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType, string customTagId)
         {
             var spanText   = span.GetText();
             var tokenStart = ParseHelper.FindTokenStart(spanText, GetDelimiterLength(span));
@@ -58,7 +58,8 @@ namespace BetterComments.CommentsTagging
 
             return new Comment(
                 new SnapshotSpan(span.Snapshot, span.Start + tokenStart, span.Length - tokenStart),
-                commentType);
+                commentType,
+                customTagId);
         }
     }
 }

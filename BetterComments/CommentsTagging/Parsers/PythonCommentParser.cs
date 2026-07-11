@@ -1,4 +1,4 @@
-﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Copyright (c) Omar Rwemi. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using BetterComments.Options;
@@ -22,7 +22,7 @@ namespace BetterComments.CommentsTagging
         protected override int GetDelimiterLength(SnapshotSpan span) => 1; // "#"
 
         /// <inheritdoc/>
-        protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType)
+        protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType, string customTagId)
         {
             var spanText   = span.GetText();
             var tokenStart = ParseHelper.FindTokenStart(spanText, GetDelimiterLength(span));
@@ -32,7 +32,8 @@ namespace BetterComments.CommentsTagging
 
             return new Comment(
                 new SnapshotSpan(span.Snapshot, span.Start + tokenStart, span.Length - tokenStart),
-                commentType);
+                commentType,
+                customTagId);
         }
     }
 }

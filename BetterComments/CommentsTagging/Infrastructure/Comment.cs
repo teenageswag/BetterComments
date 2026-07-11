@@ -1,4 +1,4 @@
-﻿// Copyright (c) Omar Rwemi. All rights reserved.
+// Copyright (c) Omar Rwemi. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 
 using Microsoft.VisualStudio.Text;
@@ -19,11 +19,18 @@ namespace BetterComments.CommentsTagging
         /// <summary>The Better Comments classification for this region.</summary>
         public readonly CommentType Type;
 
+        /// <summary>
+        /// The custom tag identifier, if this segment was matched by a custom tag.
+        /// Null for built-in tags.
+        /// </summary>
+        public readonly string CustomTagId;
+
         /// <summary>Initialises a new <see cref="CommentSegment"/>.</summary>
-        public CommentSegment(SnapshotSpan span, CommentType type)
+        public CommentSegment(SnapshotSpan span, CommentType type, string customTagId = null)
         {
             Span = span;
             Type = type;
+            CustomTagId = customTagId;
         }
     }
 
@@ -61,17 +68,17 @@ namespace BetterComments.CommentsTagging
         /// Creates a <see cref="Comment"/> where every span shares the same classification
         /// (used by all single-line parsers).
         /// </summary>
-        public Comment(IEnumerable<SnapshotSpan> spans, CommentType type)
+        public Comment(IEnumerable<SnapshotSpan> spans, CommentType type, string customTagId = null)
         {
-            Segments = spans.Select(s => new CommentSegment(s, type)).ToList();
+            Segments = spans.Select(s => new CommentSegment(s, type, customTagId)).ToList();
         }
 
         /// <summary>
         /// Creates a <see cref="Comment"/> from a single span (convenience overload).
         /// </summary>
-        public Comment(SnapshotSpan span, CommentType type)
+        public Comment(SnapshotSpan span, CommentType type, string customTagId = null)
         {
-            Segments = new List<CommentSegment> { new CommentSegment(span, type) };
+            Segments = new List<CommentSegment> { new CommentSegment(span, type, customTagId) };
         }
     }
 }

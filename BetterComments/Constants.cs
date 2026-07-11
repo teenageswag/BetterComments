@@ -2,6 +2,7 @@ namespace BetterComments
 {
     internal static class Constants
     {
+        // Content types
         public const string ContentTypeCSharp = "csharp";
         public const string ContentTypeBasic = "basic";
         public const string ContentTypePython = "python";
@@ -13,10 +14,19 @@ namespace BetterComments
         public const string ContentTypeXaml = "xaml";
         public const string ContentTypeHtml = "html";
         public const string ContentTypeCode = "code";
+        public const string ContentTypeRust = "rust";
+        public const string ContentTypeGo = "go";
 
+        // Built-in classification names
         public const string CriticalComment = "BetterComments.Critical";
         public const string WarningComment = "BetterComments.Warning";
         public const string IdeasComment = "BetterComments.Ideas";
         public const string InfoComment = "BetterComments.Info";
+
+        // Custom tag classification prefix
+        public const string CustomTagPrefix = "BetterComments.Custom.";
+
+        // Settings keys
+        public const string CustomTagsSettingKey = "CustomTags";
     }
 }

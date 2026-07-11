@@ -39,7 +39,7 @@ namespace BetterComments.CommentsTagging
         }
 
         /// <inheritdoc/>
-        protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType)
+        protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType, string customTagId)
         {
             // This is only used for the base Parse logic, which we override.
             return new Comment(span, CommentType.Normal);

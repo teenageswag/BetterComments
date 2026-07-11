@@ -46,7 +46,7 @@ namespace BetterComments.CommentsTagging
         }
 
         /// <inheritdoc/>
-        protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType)
+        protected override Comment SpecificParse(SnapshotSpan span, CommentType commentType, string customTagId)
         {
             // Only reached for "//" single-line comments.
             var spanText   = span.GetText();
@@ -57,7 +57,8 @@ namespace BetterComments.CommentsTagging
 
             return new Comment(
                 new SnapshotSpan(span.Snapshot, span.Start + tokenStart, span.Length - tokenStart),
-                commentType);
+                commentType,
+                customTagId);
         }
     }
 }

@@ -30,16 +30,19 @@ namespace BetterComments.CommentsTagging
         {
             if (spanText == null || delimLen >= spanText.Length) return -1;
 
-            var afterDelim = spanText.Substring(delimLen);
-            var trimmed    = afterDelim.TrimStart();
+            // Find first non-whitespace after delimiter without allocating substring
+            int startIdx = delimLen;
+            while (startIdx < spanText.Length && char.IsWhiteSpace(spanText[startIdx]))
+                startIdx++;
 
-            if (string.IsNullOrEmpty(trimmed))                     return -1;
-            
+            if (startIdx >= spanText.Length) return -1;
+
+            // Create only the trimmed substring for token matching
+            var trimmed = spanText.Substring(startIdx);
             var matchResult = TokenMatcher.Match(trimmed);
             if (matchResult.Type == CommentType.Normal) return -1;
 
-            var leadingSpace = afterDelim.Length - trimmed.Length;
-            return delimLen + leadingSpace + matchResult.Index;
+            return startIdx + matchResult.Index;
         }
 
         /// <summary>
@@ -49,8 +52,13 @@ namespace BetterComments.CommentsTagging
         {
             if (spanText == null || delimLen >= spanText.Length) return null;
 
-            var afterDelim = spanText.Substring(delimLen);
-            return TokenMatcher.Match(afterDelim.TrimStart()).Token;
+            int startIdx = delimLen;
+            while (startIdx < spanText.Length && char.IsWhiteSpace(spanText[startIdx]))
+                startIdx++;
+
+            if (startIdx >= spanText.Length) return null;
+
+            return TokenMatcher.Match(spanText.Substring(startIdx)).Token;
         }
 
         // ──────────────────────────────────────────────────────────────────────────────────────
@@ -112,7 +120,7 @@ namespace BetterComments.CommentsTagging
 
                 int contentLen = contentEnd - contentStart;
 
-                if (contentLen <= 0 || string.IsNullOrWhiteSpace(lineText.Substring(contentStart, contentLen)))
+                if (contentLen <= 0 || IsWhitespace(lineText, contentStart, contentLen))
                 {
                     // Empty / whitespace → reset current section
                     currentType = CommentType.Normal;
@@ -120,17 +128,28 @@ namespace BetterComments.CommentsTagging
                 }
 
                 // ── Token detection ───────────────────────────────────────────────────────
-                string rawContent    = lineText.Substring(contentStart, contentLen);
-                string trimmedForTok = rawContent.TrimStart();
-                var    matchResult   = TokenMatcher.Match(trimmedForTok);
+                // Find first non-whitespace in content range without allocating substring
+                int firstNonWs = contentStart;
+                while (firstNonWs < contentEnd && char.IsWhiteSpace(lineText[firstNonWs]))
+                    firstNonWs++;
+
+                int trimmedLen = contentEnd - firstNonWs;
+                if (trimmedLen <= 0)
+                {
+                    currentType = CommentType.Normal;
+                    continue;
+                }
+
+                // Create only the trimmed substring for token matching
+                var trimmedForTok = lineText.Substring(firstNonWs, trimmedLen);
+                var matchResult   = TokenMatcher.Match(trimmedForTok);
 
                 if (matchResult.Type != CommentType.Normal)
                 {
                     // Start of a new classified section.
                     currentType = matchResult.Type;
 
-                    int leadingSpace = rawContent.Length - trimmedForTok.Length;
-                    int tokenStart   = contentStart + leadingSpace + matchResult.Index;
+                    int tokenStart = firstNonWs + matchResult.Index;
 
                     if (isKeywordOnly(matchResult.Type))
                     {
@@ -156,13 +175,11 @@ namespace BetterComments.CommentsTagging
                     // Continuation of the current section.
                     if (!isKeywordOnly(currentType))
                     {
-                        int firstChar = IndexOfFirstChar(lineText, contentStart);
-                        if (firstChar < 0) firstChar = contentStart;
-                        int len = contentEnd - firstChar;
+                        int len = contentEnd - firstNonWs;
                         if (len > 0)
                         {
                             segments.Add(new CommentSegment(
-                                new SnapshotSpan(snapshot, line.Start + firstChar, len),
+                                new SnapshotSpan(snapshot, line.Start + firstNonWs, len),
                                 currentType));
                         }
                     }
@@ -251,7 +268,8 @@ namespace BetterComments.CommentsTagging
         /// </summary>
         public static SnapshotSpan CompleteSingleLineCommentSpan(SnapshotSpan source, string startString)
         {
-            if (!source.GetText().Contains(startString))
+            var lineText = source.GetText();
+            if (!lineText.Contains(startString))
                 throw new ArgumentException(
                     $"The SnapshotSpan does not contain \"{startString}\".", nameof(startString));
 
@@ -268,7 +286,8 @@ namespace BetterComments.CommentsTagging
         public static List<SnapshotSpan> CompleteDelimitedCommentSpan(
             SnapshotSpan source, string start, string end)
         {
-            if (!source.GetText().Contains(start))
+            var sourceText = source.GetText();
+            if (!sourceText.Contains(start))
                 throw new ArgumentException(
                     $"The SnapshotSpan does not contain \"{start}\".", nameof(start));
 
@@ -298,8 +317,29 @@ namespace BetterComments.CommentsTagging
         /// </summary>
         private static bool IsOnlyCloser(string lineText, string closer)
         {
-            var t = lineText.Trim();
-            return t.Length == 0 || t == closer;
+            int start = 0;
+            int end = lineText.Length;
+
+            // TrimStart
+            while (start < end && char.IsWhiteSpace(lineText[start]))
+                start++;
+
+            // TrimEnd
+            while (end > start && char.IsWhiteSpace(lineText[end - 1]))
+                end--;
+
+            int len = end - start;
+            return len == 0 || (len == closer.Length && lineText.IndexOf(closer, start, len, StringComparison.OrdinalIgnoreCase) == start);
+        }
+
+        /// <summary>
+        /// Returns <c>true</c> if the range [<paramref name="start"/>, <paramref name="start"/> + <paramref name="length"/>) is all whitespace.
+        /// </summary>
+        private static bool IsWhitespace(string s, int start, int length)
+        {
+            for (int i = start; i < start + length; i++)
+                if (!char.IsWhiteSpace(s[i])) return false;
+            return true;
         }
 
         /// <summary>
@@ -349,17 +389,6 @@ namespace BetterComments.CommentsTagging
                 lastNonWs--;
 
             return lastNonWs >= contentStart ? lastNonWs + 1 : contentStart;
-        }
-
-        /// <summary>
-        /// Returns the index of the first non-whitespace character at or after
-        /// <paramref name="startFrom"/>, or -1 if none exists.
-        /// </summary>
-        private static int IndexOfFirstChar(string s, int startFrom)
-        {
-            for (int i = startFrom; i < s.Length; i++)
-                if (!char.IsWhiteSpace(s[i])) return i;
-            return -1;
         }
     }
 }

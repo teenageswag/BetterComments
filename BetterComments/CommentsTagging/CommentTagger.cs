@@ -23,7 +23,9 @@ namespace BetterComments.CommentsTagging
     {
         private readonly IClassificationTypeRegistryService classRegistry;
         private readonly ITagAggregator<IClassificationTag> tagAggregator;
-        private readonly BetterCommentsSettings settings = BetterCommentsSettings.Instance;
+        private readonly Func<IContentType, ICommentParser> parserFactory;
+        private readonly Dictionary<CommentType, ClassificationTag> tagCache = new Dictionary<CommentType, ClassificationTag>();
+        private readonly Dictionary<string, ClassificationTag> customTagCache = new Dictionary<string, ClassificationTag>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
         /// Raised when tags change.  Not currently fired (tags are recomputed on every request).
@@ -33,21 +35,26 @@ namespace BetterComments.CommentsTagging
 #pragma warning restore CS0067
 
         /// <summary>
-        /// Initialises the tagger with the classification type registry and tag aggregator.
+        /// Initialises the tagger with the classification type registry, tag aggregator, and parser factory.
         /// </summary>
         public CommentTagger(IClassificationTypeRegistryService registry,
-                             ITagAggregator<IClassificationTag> aggregator)
+                             ITagAggregator<IClassificationTag> aggregator,
+                             Func<IContentType, ICommentParser> parserFactory)
         {
             classRegistry = registry;
-            tagAggregator  = aggregator;
+            tagAggregator = aggregator;
+            this.parserFactory = parserFactory;
         }
 
         /// <inheritdoc/>
         public IEnumerable<ITagSpan<ClassificationTag>> GetTags(NormalizedSnapshotSpanCollection spans)
         {
+            if (spans.Count == 0)
+                return Enumerable.Empty<ITagSpan<ClassificationTag>>();
+
             var snapshot = spans[0].Snapshot;
             var results  = new List<TagSpan<ClassificationTag>>();
-            var parser   = CreateCommentParser(snapshot.ContentType);
+            var parser   = parserFactory(snapshot.ContentType);
 
             if (parser == null) return results; // Unsupported content type
 
@@ -65,7 +72,8 @@ namespace BetterComments.CommentsTagging
                         {
                             if (seg.Type != CommentType.Normal && yieldedSpans.Add(seg.Span))
                             {
-                                results.Add(new TagSpan<ClassificationTag>(seg.Span, CreateTag(seg.Type)));
+                                var tag = CreateTag(seg.Type, seg.CustomTagId);
+                                results.Add(new TagSpan<ClassificationTag>(seg.Span, tag));
                             }
                         }
                     }
@@ -83,45 +91,76 @@ namespace BetterComments.CommentsTagging
         //  Private helpers
         // ──────────────────────────────────────────────────────────────────────────────────────
 
-        private ClassificationTag CreateTag(CommentType type)
+        private ClassificationTag CreateTag(CommentType type, string customTagId)
         {
+            // Handle custom tags
+            if (customTagId != null)
+                return CreateCustomTag(customTagId);
+
+            // Handle built-in types
+            if (tagCache.TryGetValue(type, out var cached))
+                return cached;
+
+            ClassificationTag tag;
             switch (type)
             {
                 case CommentType.Critical:
-                    return new ClassificationTag(classRegistry.GetClassificationType(Constants.CriticalComment));
+                    tag = new ClassificationTag(classRegistry.GetClassificationType(Constants.CriticalComment));
+                    break;
                 case CommentType.Warning:
-                    return new ClassificationTag(classRegistry.GetClassificationType(Constants.WarningComment));
+                    tag = new ClassificationTag(classRegistry.GetClassificationType(Constants.WarningComment));
+                    break;
                 case CommentType.Ideas:
-                    return new ClassificationTag(classRegistry.GetClassificationType(Constants.IdeasComment));
+                    tag = new ClassificationTag(classRegistry.GetClassificationType(Constants.IdeasComment));
+                    break;
                 case CommentType.Info:
-                    return new ClassificationTag(classRegistry.GetClassificationType(Constants.InfoComment));
+                    tag = new ClassificationTag(classRegistry.GetClassificationType(Constants.InfoComment));
+                    break;
                 default:
-                    return new ClassificationTag(classRegistry.GetClassificationType("comment"));
+                    tag = new ClassificationTag(classRegistry.GetClassificationType("comment"));
+                    break;
             }
+
+            tagCache[type] = tag;
+            return tag;
         }
 
-        /// <summary>
-        /// Selects the language-specific parser for the given content type, or returns
-        /// <c>null</c> if the content type is not supported by this extension.
-        /// </summary>
-        private ICommentParser CreateCommentParser(IContentType contentType)
+        private ClassificationTag CreateCustomTag(string customTagId)
         {
-            var s = settings;
+            if (customTagCache.TryGetValue(customTagId, out var cached))
+                return cached;
 
-            if (contentType.IsOfType(Constants.ContentTypeCSharp))      return new CSharpCommentParser(s);
-            if (contentType.IsOfType(Constants.ContentTypeBasic))       return new VBCommentParser(s);
-            if (contentType.IsOfType(Constants.ContentTypePython))      return new PythonCommentParser(s);
-            if (contentType.IsOfType(Constants.ContentTypeFSharp))      return new FSharpCommentParser(s);
-            if (contentType.IsOfType(Constants.ContentTypeCpp))         return new CppCommentParser(s);
-            if (contentType.IsOfType(Constants.ContentTypeJavaScript)
-             || contentType.IsOfType(Constants.ContentTypeTypeScript))  return new JavaScriptCommentParser(s);
-            if (contentType.IsOfType(Constants.ContentTypeRazorCSharp)) return new MarkupCommentParser(s);
+            // Look up the custom tag definition to get its classification name
+            var settings = BetterCommentsSettings.Instance;
+            var customTag = settings.CustomTags.GetByTag(customTagId);
 
-            var name = contentType.TypeName.ToLowerInvariant();
-            if (name.Contains(Constants.ContentTypeXaml) || name.Contains(Constants.ContentTypeHtml))
-                return new MarkupCommentParser(s);
+            string classificationName;
+            if (customTag != null && customTag.UseCustomColor)
+            {
+                // Use the custom tag's own classification
+                classificationName = customTag.GetClassificationName();
+            }
+            else if (customTag != null)
+            {
+                // Use the mapped type's classification
+                classificationName = customTag.GetClassificationName();
+            }
+            else
+            {
+                // Fallback to Info if custom tag not found
+                classificationName = Constants.InfoComment;
+            }
 
-            return null;
+            var classificationType = classRegistry.GetClassificationType(classificationName);
+            if (classificationType == null)
+            {
+                // Fallback to comment if classification not registered
+                classificationType = classRegistry.GetClassificationType("comment");
+            }
+
+            var tag = new ClassificationTag(classificationType);
+            customTagCache[customTagId] = tag;
+            return tag;
         }
 
         /// <inheritdoc/>

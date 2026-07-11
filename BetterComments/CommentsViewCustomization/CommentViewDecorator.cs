@@ -224,19 +224,19 @@ namespace BetterComments.CommentsViewCustomization
 
         private bool GetBold(string name)
         {
-            if (name == Constants.CriticalComment) return settings.CriticalBold;
-            if (name == Constants.WarningComment)  return settings.WarningBold;
-            if (name == Constants.IdeasComment)    return settings.IdeasBold;
-            if (name == Constants.InfoComment)     return settings.InfoBold;
+            if (name == Constants.CriticalComment) return settings.Critical.Bold;
+            if (name == Constants.WarningComment)  return settings.Warning.Bold;
+            if (name == Constants.IdeasComment)    return settings.Ideas.Bold;
+            if (name == Constants.InfoComment)     return settings.Info.Bold;
             return false;
         }
 
         private bool GetUnderline(string name)
         {
-            if (name == Constants.CriticalComment) return settings.CriticalUnderline;
-            if (name == Constants.WarningComment)  return settings.WarningUnderline;
-            if (name == Constants.IdeasComment)    return settings.IdeasUnderline;
-            if (name == Constants.InfoComment)     return settings.InfoUnderline;
+            if (name == Constants.CriticalComment) return settings.Critical.Underline;
+            if (name == Constants.WarningComment)  return settings.Warning.Underline;
+            if (name == Constants.IdeasComment)    return settings.Ideas.Underline;
+            if (name == Constants.InfoComment)     return settings.Info.Underline;
             return false;
         }
     }

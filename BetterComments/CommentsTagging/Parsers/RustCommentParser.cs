@@ -3,42 +3,25 @@
 
 using BetterComments.Options;
 using Microsoft.VisualStudio.Text;
-using System.Collections.Generic;
 
 namespace BetterComments.CommentsTagging
 {
     /// <summary>
-    /// Parses C# single-line (<c>//</c>) and block (<c>/* … */</c>) comments.
-    ///
-    /// Single-line comments behave as before: the colour is applied from the token to the end
-    /// of the line (or just the keyword in keyword-only mode).
-    ///
-    /// Block comments support <em>per-section</em> colouring:
-    /// <code>
-    /// /*
-    ///  * err: this is red         ← Critical
-    ///  * still red                ← Critical (continuation)
-    ///  *                          ← empty → resets colour
-    ///  * normal comment           ← uncoloured
-    ///  * todo: this is blue       ← Ideas
-    ///  * warn: now orange         ← Warning
-    ///  * still orange             ← Warning (continuation)
-    ///  */
-    /// </code>
-    /// Javadoc-style leading asterisks (<c> * content</c>) are stripped before token detection.
+    /// Parses Rust single-line (<c>//</c>) and block (<c>/* … */</c>) comments.
+    /// Multi-line block comments use the same per-section colouring as the C# parser.
     /// </summary>
-    internal sealed class CSharpCommentParser : CommentParser
+    internal sealed class RustCommentParser : CommentParser
     {
         private const string Opener = "/*";
         private const string Closer = "*/";
 
         /// <summary>Initialises the parser with the active settings instance.</summary>
-        public CSharpCommentParser(BetterCommentsSettings settings) : base(settings) { }
+        public RustCommentParser(BetterCommentsSettings settings) : base(settings) { }
 
         /// <inheritdoc/>
         public override bool IsValidComment(SnapshotSpan span)
         {
-            // If the Roslyn tagger classified it as a comment, it is valid.
+            // If the Visual Studio tagger classified it as a comment, it is valid.
             return true;
         }
 
@@ -60,8 +43,6 @@ namespace BetterComments.CommentsTagging
             }
 
             // It's a block comment (or a continuation line of one).
-            // Visual Studio sometimes yields line-by-line classification spans for block comments.
-            // We expand the span to the full /* ... */ block to process it contextually.
             var fullSpan = ParseHelper.ExpandToFullBlockComment(span, Opener, Closer);
             return ParseBlockComment(fullSpan);
         }
