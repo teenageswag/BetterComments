@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Generic;
-using System.ComponentModel;
+using System.Globalization;
+using System.Linq;
+using System.Text;
 
 namespace BetterComments.Options
 {
@@ -12,22 +15,41 @@ namespace BetterComments.Options
 
         public BetterCommentsSettings()
         {
-            // Initialise default settings
-            font = "";
-            size = 0;
-            opacity = 1.0;
-            italic = false;
+            ResetToDefaults();
+            customTags = new CustomTagSettings();
+            customTags.TagsChanged += OnCustomTagsChanged;
+
+            // Load saved settings from VS store if they exist
+            SettingsStore.LoadSettings(this);
+        }
+
+        internal void ResetToDefaults()
+        {
+            Font = string.Empty;
+            Size = 0;
+            Opacity = 1;
+            Italic = false;
 
             critical = new CommentTypeSettings(defaultBold: true);
             warning = new CommentTypeSettings();
             ideas = new CommentTypeSettings();
             info = new CommentTypeSettings();
 
-            customTags = new CustomTagSettings();
-            customTags.TagsChanged += OnCustomTagsChanged;
+            OnPropertyChanged(nameof(CriticalBold));
+            OnPropertyChanged(nameof(CriticalUnderline));
+            OnPropertyChanged(nameof(CriticalHighlightKeywordOnly));
+            OnPropertyChanged(nameof(WarningBold));
+            OnPropertyChanged(nameof(WarningUnderline));
+            OnPropertyChanged(nameof(WarningHighlightKeywordOnly));
+            OnPropertyChanged(nameof(IdeasBold));
+            OnPropertyChanged(nameof(IdeasUnderline));
+            OnPropertyChanged(nameof(IdeasHighlightKeywordOnly));
+            OnPropertyChanged(nameof(InfoBold));
+            OnPropertyChanged(nameof(InfoUnderline));
+            OnPropertyChanged(nameof(InfoHighlightKeywordOnly));
 
-            // Load saved settings from VS store if they exist
-            SettingsStore.LoadSettings(this);
+            if (customTags != null)
+                customTags.LoadFrom(null);
         }
 
         private void OnCustomTagsChanged()
@@ -50,7 +72,7 @@ namespace BetterComments.Options
         public double Size
         {
             get => size;
-            set => SetField(ref size, value);
+            set => SetField(ref size, double.IsNaN(value) ? 0 : Math.Max(-3, Math.Min(3, value)));
         }
 
         private double opacity;
@@ -58,7 +80,7 @@ namespace BetterComments.Options
         public double Opacity
         {
             get => opacity;
-            set => SetField(ref opacity, value);
+            set => SetField(ref opacity, double.IsNaN(value) ? 1 : Math.Max(0.1, Math.Min(1, value)));
         }
 
         private bool italic;
@@ -175,13 +197,45 @@ namespace BetterComments.Options
         /// Gets or sets the custom tags for serialization.
         /// </summary>
         [Setting]
-        internal List<CustomTagDefinition> CustomTagsList
+        internal string CustomTagsList
         {
-            get => customTags.ToList();
+            get => string.Join(";", customTags.CustomTags.Select(tag => string.Join(",",
+                Convert.ToBase64String(Encoding.UTF8.GetBytes(tag.Tag ?? string.Empty)),
+                ((int)tag.MappedType).ToString(CultureInfo.InvariantCulture),
+                tag.UseCustomColor ? "1" : "0",
+                tag.Enabled ? "1" : "0")));
             set
             {
-                customTags.LoadFrom(value);
-                CommentsTagging.TokenMatcher.UpdateCustomTags(customTags.CustomTags);
+                var definitions = new List<CustomTagDefinition>();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    foreach (var item in value.Split(';'))
+                    {
+                        var parts = item.Split(',');
+                        int type;
+                        if (parts.Length != 4
+                            || !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out type)
+                            || !Enum.IsDefined(typeof(CommentsTagging.CommentType), type))
+                            continue;
+
+                        try
+                        {
+                            definitions.Add(new CustomTagDefinition
+                            {
+                                Tag = Encoding.UTF8.GetString(Convert.FromBase64String(parts[0])),
+                                MappedType = (CommentsTagging.CommentType)type,
+                                UseCustomColor = parts[2] == "1",
+                                Enabled = parts[3] == "1"
+                            });
+                        }
+                        catch (FormatException)
+                        {
+                            // Ignore a malformed saved entry and continue loading valid tags.
+                        }
+                    }
+                }
+
+                customTags.LoadFrom(definitions);
             }
         }
     }

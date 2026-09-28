@@ -4,6 +4,7 @@ using Microsoft.VisualStudio.Shell.Settings;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 
@@ -30,6 +31,7 @@ namespace BetterComments.Options
       }
 
       public static event Action SettingsSaved;
+      public static event Action SettingsChanged;
 
       public static void SaveSettings(ISettings settings)
       {
@@ -40,10 +42,9 @@ namespace BetterComments.Options
                store.CreateCollection(settings.Key);
             }
 
-            if (SaveSettingsIntoStore(settings))
-            {
-               SettingsSaved?.Invoke();
-            }
+            SaveSettingsIntoStore(settings);
+            SettingsSaved?.Invoke();
+            SettingsChanged?.Invoke();
          }
          catch (Exception ex)
          {
@@ -55,10 +56,14 @@ namespace BetterComments.Options
       {
          try
          {
+            if (settings is BetterCommentsSettings betterCommentsSettings)
+               betterCommentsSettings.ResetToDefaults();
+
             if (store.CollectionExists(settings.Key))
             {
                LoadSettingsFromStore(settings);
             }
+            SettingsChanged?.Invoke();
          }
          catch (Exception ex)
          {
@@ -87,7 +92,7 @@ namespace BetterComments.Options
                   break;
 
                case double d:
-                  store.SetString(settings.Key, prop.Name, d.ToString());
+                  store.SetString(settings.Key, prop.Name, d.ToString(CultureInfo.InvariantCulture));
                   saved = true;
                   break;
 
@@ -119,7 +124,7 @@ namespace BetterComments.Options
                      prop.SetValue(settings, store.GetInt32(settings.Key, prop.Name));
                      break;
 
-                  case double d when double.TryParse(store.GetString(settings.Key, prop.Name), out double value):
+                  case double d when TryParseDouble(store.GetString(settings.Key, prop.Name), out double value):
                      prop.SetValue(settings, value);
                      break;
 
@@ -134,8 +139,14 @@ namespace BetterComments.Options
       private static IEnumerable<PropertyInfo> GetProperties(ISettings settings)
       {
          return settings.GetType()
-                        .GetProperties()
+                        .GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
                         .Where(p => Attribute.IsDefined(p, typeof(SettingAttribute)));
+      }
+
+      private static bool TryParseDouble(string value, out double result)
+      {
+         return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out result)
+             || double.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out result);
       }
    }
 }

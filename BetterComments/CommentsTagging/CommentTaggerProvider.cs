@@ -45,7 +45,7 @@ namespace BetterComments.CommentsTagging
 
             Debug.WriteLine("[BetterComments] CommentTagger created.");
 
-            return new CommentTagger(ClassificationRegistry, tagAggregator, GetOrCreateParser) as ITagger<T>;
+            return new CommentTagger(ClassificationRegistry, tagAggregator, GetOrCreateParser, buffer, textView) as ITagger<T>;
         }
 
         private ICommentParser GetOrCreateParser(IContentType contentType)

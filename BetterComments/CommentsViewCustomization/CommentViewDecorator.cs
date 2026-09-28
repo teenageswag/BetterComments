@@ -72,7 +72,7 @@ namespace BetterComments.CommentsViewCustomization
         {
             view.GotAggregateFocus += OnViewGotFocus;
             view.Closed += OnViewClosed;
-            SettingsStore.SettingsSaved += OnSettingsSaved;
+            SettingsStore.SettingsChanged += OnSettingsChanged;
 
             formatMap  = map;
             regService = service;
@@ -84,7 +84,7 @@ namespace BetterComments.CommentsViewCustomization
         //  Event handlers
         // ──────────────────────────────────────────────────────────────────────────────────────
 
-        private void OnSettingsSaved()
+        private void OnSettingsChanged()
         {
             if (!isDecorating) Decorate();
         }
@@ -104,7 +104,7 @@ namespace BetterComments.CommentsViewCustomization
                 view.GotAggregateFocus -= OnViewGotFocus;
                 view.Closed -= OnViewClosed;
             }
-            SettingsStore.SettingsSaved -= OnSettingsSaved;
+            SettingsStore.SettingsChanged -= OnSettingsChanged;
         }
 
         // ──────────────────────────────────────────────────────────────────────────────────────
@@ -113,10 +113,12 @@ namespace BetterComments.CommentsViewCustomization
 
         private void Decorate()
         {
+            bool batchStarted = false;
             try
             {
                 isDecorating = true;
                 formatMap.BeginBatchUpdate();
+                batchStarted = true;
 
                 DecorateKnownCommentTypes();
                 DecorateUnknownCommentTypes();
@@ -127,8 +129,15 @@ namespace BetterComments.CommentsViewCustomization
             }
             finally
             {
-                formatMap.EndBatchUpdate();
-                isDecorating = false;
+                try
+                {
+                    if (batchStarted)
+                        formatMap.EndBatchUpdate();
+                }
+                finally
+                {
+                    isDecorating = false;
+                }
             }
         }
 
@@ -171,9 +180,18 @@ namespace BetterComments.CommentsViewCustomization
 
             // ── Font family ───────────────────────────────────────────────────────────────────
             var currentTf  = props.TypefaceEmpty ? null : props.Typeface;
-            var fontFamily = !string.IsNullOrWhiteSpace(settings.Font)
-                           ? new FontFamily(settings.Font)
-                           : (currentTf?.FontFamily ?? new FontFamily());
+            var fontFamily = currentTf?.FontFamily ?? new FontFamily();
+            if (!string.IsNullOrWhiteSpace(settings.Font))
+            {
+                try
+                {
+                    fontFamily = new FontFamily(settings.Font);
+                }
+                catch (ArgumentException)
+                {
+                    // Keep the editor's current font when a saved font is no longer installed.
+                }
+            }
 
             var typeface = new Typeface(
                 fontFamily,
@@ -184,7 +202,7 @@ namespace BetterComments.CommentsViewCustomization
             props = props.SetTypeface(typeface);
 
             // ── Font size ─────────────────────────────────────────────────────────────────────
-            var targetSize = GetEditorTextSize() + settings.Size;
+            var targetSize = Math.Max(1, GetEditorTextSize() + settings.Size);
             if (Math.Abs(targetSize - props.FontRenderingEmSize) > 0.01)
                 props = props.SetFontRenderingEmSize(targetSize);
 

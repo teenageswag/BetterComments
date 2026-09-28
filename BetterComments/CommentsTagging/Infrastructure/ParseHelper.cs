@@ -199,6 +199,7 @@ namespace BetterComments.CommentsTagging
             var snapshot = span.Snapshot;
             int start = span.Start;
             int end = span.End;
+            bool foundOpener = false;
 
             // ── Backward scan for opener ──────────────────────────────────────────────────
             int startLineNo = snapshot.GetLineFromPosition(span.Start).LineNumber;
@@ -209,7 +210,7 @@ namespace BetterComments.CommentsTagging
                 int limit = (lineNo == startLineNo) ? (span.Start - line.Start) : text.Length;
 
                 int searchIdx = limit - opener.Length;
-                bool foundOpener = false;
+                bool foundOnLine = false;
 
                 while (searchIdx >= 0)
                 {
@@ -229,22 +230,27 @@ namespace BetterComments.CommentsTagging
                         // Found the active opener!
                         start = line.Start + openerIdx;
                         foundOpener = true;
+                        foundOnLine = true;
                         break;
                     }
                 }
 
-                if (foundOpener)
+                if (foundOnLine)
                     break;
             }
 
             // ── Forward scan for closer ───────────────────────────────────────────────────
-            int endLineNo = snapshot.GetLineFromPosition(span.End).LineNumber;
+            // Search from the opener, not from the incoming classification span's end. Some
+            // language taggers return only a partial span, which can already include the closer.
+            int endLineNo = snapshot.GetLineFromPosition(foundOpener ? start : span.End).LineNumber;
             int lineCount = snapshot.LineCount;
             for (int lineNo = endLineNo; lineNo < lineCount; lineNo++)
             {
                 var line = snapshot.GetLineFromLineNumber(lineNo);
                 var text = line.GetText();
-                int searchStart = (lineNo == endLineNo) ? Math.Max(0, span.End - line.Start) : 0;
+                int searchStart = lineNo == endLineNo
+                    ? (foundOpener ? start - line.Start + opener.Length : Math.Max(0, span.End - line.Start))
+                    : 0;
 
                 int closerIdx = text.IndexOf(closer, searchStart, StringComparison.OrdinalIgnoreCase);
                 if (closerIdx >= 0)

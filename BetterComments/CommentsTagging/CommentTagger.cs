@@ -4,6 +4,7 @@
 using BetterComments.Options;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Classification;
+using Microsoft.VisualStudio.Text.Editor;
 using Microsoft.VisualStudio.Text.Tagging;
 using Microsoft.VisualStudio.Utilities;
 using System;
@@ -24,26 +25,50 @@ namespace BetterComments.CommentsTagging
         private readonly IClassificationTypeRegistryService classRegistry;
         private readonly ITagAggregator<IClassificationTag> tagAggregator;
         private readonly Func<IContentType, ICommentParser> parserFactory;
+        private readonly ITextBuffer buffer;
+        private readonly ITextView textView;
+        private bool disposed;
         private readonly Dictionary<CommentType, ClassificationTag> tagCache = new Dictionary<CommentType, ClassificationTag>();
         private readonly Dictionary<string, ClassificationTag> customTagCache = new Dictionary<string, ClassificationTag>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
-        /// Raised when tags change.  Not currently fired (tags are recomputed on every request).
+        /// Raised when source classifications or Better Comments settings change.
         /// </summary>
-#pragma warning disable CS0067
         public event EventHandler<SnapshotSpanEventArgs> TagsChanged;
-#pragma warning restore CS0067
 
         /// <summary>
         /// Initialises the tagger with the classification type registry, tag aggregator, and parser factory.
         /// </summary>
         public CommentTagger(IClassificationTypeRegistryService registry,
                              ITagAggregator<IClassificationTag> aggregator,
-                             Func<IContentType, ICommentParser> parserFactory)
+                             Func<IContentType, ICommentParser> parserFactory,
+                             ITextBuffer buffer,
+                             ITextView textView)
         {
             classRegistry = registry;
             tagAggregator = aggregator;
             this.parserFactory = parserFactory;
+            this.buffer = buffer;
+            this.textView = textView;
+            tagAggregator.TagsChanged += OnSourceTagsChanged;
+            SettingsStore.SettingsChanged += OnSettingsChanged;
+            textView.Closed += OnViewClosed;
+        }
+
+        private void OnViewClosed(object sender, EventArgs e) => Dispose();
+
+        private void OnSourceTagsChanged(object sender, TagsChangedEventArgs e)
+        {
+            foreach (var span in e.Span.GetSpans(buffer.CurrentSnapshot))
+                TagsChanged?.Invoke(this, new SnapshotSpanEventArgs(span));
+        }
+
+        private void OnSettingsChanged()
+        {
+            tagCache.Clear();
+            customTagCache.Clear();
+            var snapshot = buffer.CurrentSnapshot;
+            TagsChanged?.Invoke(this, new SnapshotSpanEventArgs(new SnapshotSpan(snapshot, 0, snapshot.Length)));
         }
 
         /// <inheritdoc/>
@@ -70,10 +95,13 @@ namespace BetterComments.CommentsTagging
                         var comment = parser.Parse(span);
                         foreach (var seg in comment.Segments)
                         {
-                            if (seg.Type != CommentType.Normal && yieldedSpans.Add(seg.Span))
+                            if (seg.Type != CommentType.Normal
+                                && spans.Any(requested => requested.IntersectsWith(seg.Span))
+                                && yieldedSpans.Add(seg.Span))
                             {
                                 var tag = CreateTag(seg.Type, seg.CustomTagId);
-                                results.Add(new TagSpan<ClassificationTag>(seg.Span, tag));
+                                if (tag != null)
+                                    results.Add(new TagSpan<ClassificationTag>(seg.Span, tag));
                             }
                         }
                     }
@@ -105,19 +133,19 @@ namespace BetterComments.CommentsTagging
             switch (type)
             {
                 case CommentType.Critical:
-                    tag = new ClassificationTag(classRegistry.GetClassificationType(Constants.CriticalComment));
+                    tag = CreateClassificationTag(Constants.CriticalComment);
                     break;
                 case CommentType.Warning:
-                    tag = new ClassificationTag(classRegistry.GetClassificationType(Constants.WarningComment));
+                    tag = CreateClassificationTag(Constants.WarningComment);
                     break;
                 case CommentType.Ideas:
-                    tag = new ClassificationTag(classRegistry.GetClassificationType(Constants.IdeasComment));
+                    tag = CreateClassificationTag(Constants.IdeasComment);
                     break;
                 case CommentType.Info:
-                    tag = new ClassificationTag(classRegistry.GetClassificationType(Constants.InfoComment));
+                    tag = CreateClassificationTag(Constants.InfoComment);
                     break;
                 default:
-                    tag = new ClassificationTag(classRegistry.GetClassificationType("comment"));
+                    tag = CreateClassificationTag("comment");
                     break;
             }
 
@@ -151,21 +179,28 @@ namespace BetterComments.CommentsTagging
                 classificationName = Constants.InfoComment;
             }
 
-            var classificationType = classRegistry.GetClassificationType(classificationName);
-            if (classificationType == null)
-            {
-                // Fallback to comment if classification not registered
-                classificationType = classRegistry.GetClassificationType("comment");
-            }
-
-            var tag = new ClassificationTag(classificationType);
+            var tag = CreateClassificationTag(classificationName);
             customTagCache[customTagId] = tag;
             return tag;
+        }
+
+        private ClassificationTag CreateClassificationTag(string classificationName)
+        {
+            var classificationType = classRegistry.GetClassificationType(classificationName)
+                                  ?? classRegistry.GetClassificationType("comment");
+            return classificationType == null ? null : new ClassificationTag(classificationType);
         }
 
         /// <inheritdoc/>
         public void Dispose()
         {
+            if (disposed)
+                return;
+
+            disposed = true;
+            textView.Closed -= OnViewClosed;
+            tagAggregator.TagsChanged -= OnSourceTagsChanged;
+            SettingsStore.SettingsChanged -= OnSettingsChanged;
             tagAggregator.Dispose();
             GC.SuppressFinalize(this);
         }

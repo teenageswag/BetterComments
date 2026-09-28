@@ -3,260 +3,168 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:comments="clr-namespace:BetterComments.CommentsTagging"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    Width="480"
+    MinWidth="560"
     mc:Ignorable="d">
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto">
-        <StackPanel Margin="14,10,14,14">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="16,12,16,16">
+            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Better Comments" />
+            <TextBlock Margin="0,3,0,14" Foreground="Gray"
+                       Text="Настройте внешний вид, категории и собственные метки комментариев." />
 
-            <!-- ══════════════════════════════════════════════════════
-                 GLOBAL FONT SETTINGS
-                 ══════════════════════════════════════════════════════ -->
-            <GroupBox Header="Global Font Settings" Margin="0,0,0,10" Padding="8,6">
+            <GroupBox Header="Внешний вид" Margin="0,0,0,12" Padding="12">
                 <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="130" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="54" />
+                    </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="90" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
 
-                    <!-- Font family -->
-                    <Label Grid.Row="0" Grid.Column="0"
-                           HorizontalAlignment="Right" VerticalAlignment="Center"
-                           Content="Font:" />
-                    <ComboBox x:Name="FontsComboBox"
-                              Grid.Row="0" Grid.Column="1"
-                              Width="280" Margin="0,4"
-                              HorizontalAlignment="Left"
-                              SelectedItem="{Binding Font, Mode=TwoWay}" />
+                    <Label Grid.Row="0" Content="Шрифт" VerticalAlignment="Center" />
+                    <ComboBox x:Name="FontsComboBox" Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2"
+                              IsEditable="True" IsTextSearchEnabled="True" Margin="0,3"
+                              Text="{Binding Font, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              ToolTip="Пустое значение использует шрифт редактора." />
 
-                    <!-- Size offset -->
-                    <Label Grid.Row="1" Grid.Column="0"
-                           HorizontalAlignment="Right" VerticalAlignment="Center"
-                           Content="Size Offset:" />
-                    <StackPanel Grid.Row="1" Grid.Column="1"
-                                Orientation="Horizontal" Margin="0,4">
-                        <Slider x:Name="SizeSlider"
-                                Width="250" Height="28"
-                                Minimum="-3" Maximum="3"
-                                TickFrequency="0.5" IsSnapToTickEnabled="True"
-                                TickPlacement="BottomRight"
-                                Value="{Binding Size, Mode=TwoWay}" />
-                        <TextBlock Padding="6,2" VerticalAlignment="Center"
-                                   Text="{Binding Value, ElementName=SizeSlider}" />
-                    </StackPanel>
+                    <Label Grid.Row="1" Content="Размер" VerticalAlignment="Center" />
+                    <Slider x:Name="SizeSlider" Grid.Row="1" Grid.Column="1" Margin="0,4"
+                            Minimum="-3" Maximum="3" TickFrequency="0.5" IsSnapToTickEnabled="True"
+                            Value="{Binding Size, Mode=TwoWay}" />
+                    <TextBlock Grid.Row="1" Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Center"
+                               Text="{Binding Value, ElementName=SizeSlider, StringFormat={}{0:F1}}" />
 
-                    <!-- Opacity -->
-                    <Label Grid.Row="2" Grid.Column="0"
-                           HorizontalAlignment="Right" VerticalAlignment="Center"
-                           Content="Opacity:" />
-                    <StackPanel Grid.Row="2" Grid.Column="1"
-                                Orientation="Horizontal" Margin="0,4">
-                        <Slider x:Name="OpacitySlider"
-                                Width="250" Height="28"
-                                Minimum="0" Maximum="1"
-                                TickFrequency="0.1" IsSnapToTickEnabled="True"
-                                TickPlacement="BottomRight"
-                                Value="{Binding Opacity, Mode=TwoWay}" />
-                        <TextBlock Padding="6,2" VerticalAlignment="Center"
-                                   Text="{Binding Value, ElementName=OpacitySlider}" />
-                    </StackPanel>
+                    <Label Grid.Row="2" Content="Непрозрачность" VerticalAlignment="Center" />
+                    <Slider x:Name="OpacitySlider" Grid.Row="2" Grid.Column="1" Margin="0,4"
+                            Minimum="0.1" Maximum="1" TickFrequency="0.1" IsSnapToTickEnabled="True"
+                            Value="{Binding Opacity, Mode=TwoWay}" />
+                    <TextBlock Grid.Row="2" Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Center"
+                               Text="{Binding Value, ElementName=OpacitySlider, StringFormat={}{0:P0}}" />
 
-                    <!-- Italic -->
-                    <StackPanel Grid.Row="3" Grid.Column="1" Orientation="Horizontal" Margin="0,4">
-                        <CheckBox VerticalAlignment="Center"
-                                  IsChecked="{Binding Italic, Mode=TwoWay}" />
-                        <Label VerticalAlignment="Center" Content="Italic" />
-                    </StackPanel>
+                    <CheckBox Grid.Row="3" Grid.Column="1" Margin="0,5,0,0" Content="Курсив"
+                              IsChecked="{Binding Italic, Mode=TwoWay}" />
                 </Grid>
             </GroupBox>
 
-            <!-- ══════════════════════════════════════════════════════
-                 PER-CLASSIFICATION SETTINGS  (2 × 2 grid)
-                 ══════════════════════════════════════════════════════ -->
-            <TextBlock Text="Per-Classification Options"
-                       FontWeight="SemiBold" Margin="0,0,0,6" />
+            <GroupBox Header="Оформление категорий" Margin="0,0,0,12" Padding="12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="130" />
+                        <ColumnDefinition Width="70" />
+                        <ColumnDefinition Width="95" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
 
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="8" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="1" Text="Полужирный" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Grid.Column="2" Text="Подчёркивание" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    <TextBlock Grid.Column="3" Text="Только метка" FontWeight="SemiBold"
+                               ToolTip="Подсвечивает только TODO:, WARN: и другие ключевые слова." />
 
-                <!-- ── Critical ───────────────────────────────────── -->
-                <GroupBox Grid.Row="0" Grid.Column="0" Margin="0,0,0,8" Padding="8,6">
-                    <GroupBox.Header>
-                        <TextBlock FontWeight="Bold" Foreground="#FF2A3D" Text="&#x25A0; Critical" />
-                    </GroupBox.Header>
-                    <StackPanel>
-                        <TextBlock Foreground="Gray" FontSize="10.5" Margin="0,0,0,6"
-                                   Text="ERROR  ·  ERR  ·  FIXME  ·  FIX" />
-                        <CheckBox Margin="0,2" Content="Bold"
-                                  IsChecked="{Binding CriticalBold, Mode=TwoWay}" />
-                        <CheckBox Margin="0,2" Content="Underline"
-                                  IsChecked="{Binding CriticalUnderline, Mode=TwoWay}" />
-                        <CheckBox Margin="0,2" Content="Highlight keyword only"
-                                  IsChecked="{Binding CriticalHighlightKeywordOnly, Mode=TwoWay}" />
-                    </StackPanel>
-                </GroupBox>
+                    <TextBlock Grid.Row="1" Text="Критическая" Foreground="#FFD64A4A" VerticalAlignment="Center" />
+                    <CheckBox Grid.Row="1" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                              IsChecked="{Binding CriticalBold, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="1" Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center"
+                              IsChecked="{Binding CriticalUnderline, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="1" Grid.Column="3" HorizontalAlignment="Center" VerticalAlignment="Center"
+                              IsChecked="{Binding CriticalHighlightKeywordOnly, Mode=TwoWay}" />
 
-                <!-- ── Warning ────────────────────────────────────── -->
-                <GroupBox Grid.Row="0" Grid.Column="2" Margin="0,0,0,8" Padding="8,6">
-                    <GroupBox.Header>
-                        <TextBlock FontWeight="Bold" Foreground="#FFAA33" Text="&#x25A0; Warning" />
-                    </GroupBox.Header>
-                    <StackPanel>
-                        <TextBlock Foreground="Gray" FontSize="10.5" Margin="0,0,0,6"
-                                   Text="WARNING  ·  WARN" />
-                        <CheckBox Margin="0,2" Content="Bold"
-                                  IsChecked="{Binding WarningBold, Mode=TwoWay}" />
-                        <CheckBox Margin="0,2" Content="Underline"
-                                  IsChecked="{Binding WarningUnderline, Mode=TwoWay}" />
-                        <CheckBox Margin="0,2" Content="Highlight keyword only"
-                                  IsChecked="{Binding WarningHighlightKeywordOnly, Mode=TwoWay}" />
-                    </StackPanel>
-                </GroupBox>
+                    <TextBlock Grid.Row="2" Text="Предупреждение" Foreground="#FFFFA640" VerticalAlignment="Center" />
+                    <CheckBox Grid.Row="2" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                              IsChecked="{Binding WarningBold, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="2" Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center"
+                              IsChecked="{Binding WarningUnderline, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="2" Grid.Column="3" HorizontalAlignment="Center" VerticalAlignment="Center"
+                              IsChecked="{Binding WarningHighlightKeywordOnly, Mode=TwoWay}" />
 
-                <!-- ── Ideas ──────────────────────────────────────── -->
-                <GroupBox Grid.Row="1" Grid.Column="0" Padding="8,6">
-                    <GroupBox.Header>
-                        <TextBlock FontWeight="Bold" Foreground="#1AA9F5" Text="&#x25A0; Ideas" />
-                    </GroupBox.Header>
-                    <StackPanel>
-                        <TextBlock Foreground="Gray" FontSize="10.5" Margin="0,0,0,6"
-                                   Text="TODO  ·  IDEA  ·  OPTIMIZE" />
-                        <CheckBox Margin="0,2" Content="Bold"
-                                  IsChecked="{Binding IdeasBold, Mode=TwoWay}" />
-                        <CheckBox Margin="0,2" Content="Underline"
-                                  IsChecked="{Binding IdeasUnderline, Mode=TwoWay}" />
-                        <CheckBox Margin="0,2" Content="Highlight keyword only"
-                                  IsChecked="{Binding IdeasHighlightKeywordOnly, Mode=TwoWay}" />
-                    </StackPanel>
-                </GroupBox>
+                    <TextBlock Grid.Row="3" Text="Задача или идея" Foreground="#FF35A6E8" VerticalAlignment="Center" />
+                    <CheckBox Grid.Row="3" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                              IsChecked="{Binding IdeasBold, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="3" Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center"
+                              IsChecked="{Binding IdeasUnderline, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="3" Grid.Column="3" HorizontalAlignment="Center" VerticalAlignment="Center"
+                              IsChecked="{Binding IdeasHighlightKeywordOnly, Mode=TwoWay}" />
 
-                <!-- ── Info ───────────────────────────────────────── -->
-                <GroupBox Grid.Row="1" Grid.Column="2" Padding="8,6">
-                    <GroupBox.Header>
-                        <TextBlock FontWeight="Bold" Foreground="#6FEA2D" Text="&#x25A0; Info" />
-                    </GroupBox.Header>
-                    <StackPanel>
-                        <TextBlock Foreground="Gray" FontSize="10.5" Margin="0,0,0,6"
-                                   Text="NOTE  ·  INFO" />
-                        <CheckBox Margin="0,2" Content="Bold"
-                                  IsChecked="{Binding InfoBold, Mode=TwoWay}" />
-                        <CheckBox Margin="0,2" Content="Underline"
-                                  IsChecked="{Binding InfoUnderline, Mode=TwoWay}" />
-                        <CheckBox Margin="0,2" Content="Highlight keyword only"
-                                  IsChecked="{Binding InfoHighlightKeywordOnly, Mode=TwoWay}" />
-                    </StackPanel>
-                </GroupBox>
-            </Grid>
+                    <TextBlock Grid.Row="4" Text="Информация" Foreground="#FF6BCB67" VerticalAlignment="Center" />
+                    <CheckBox Grid.Row="4" Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center"
+                              IsChecked="{Binding InfoBold, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="4" Grid.Column="2" HorizontalAlignment="Center" VerticalAlignment="Center"
+                              IsChecked="{Binding InfoUnderline, Mode=TwoWay}" />
+                    <CheckBox Grid.Row="4" Grid.Column="3" HorizontalAlignment="Center" VerticalAlignment="Center"
+                              IsChecked="{Binding InfoHighlightKeywordOnly, Mode=TwoWay}" />
+                </Grid>
+            </GroupBox>
 
-            <!-- ══════════════════════════════════════════════════════
-                 CUSTOM TAGS
-                 ══════════════════════════════════════════════════════ -->
-            <GroupBox Header="Custom Tags" Margin="0,10,0,0" Padding="8,6">
+            <GroupBox Header="Собственные метки" Padding="12">
                 <StackPanel>
-                    <TextBlock Foreground="Gray" FontSize="10.5" Margin="0,0,0,6"
-                               Text="Define custom comment tags (e.g., REVIEW, HACK, DEPRECATED)" />
+                    <TextBlock Margin="0,0,0,8" Foreground="Gray" TextWrapping="Wrap"
+                               Text="Добавьте слово, которое будет распознаваться в комментариях, например REVIEW: или HACK:." />
 
-                    <!-- Custom tags list -->
-                    <Grid Margin="0,0,0,8">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="120" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
+                    <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="8" />
-                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="110" />
                         </Grid.ColumnDefinitions>
-
-                        <!-- Header -->
-                        <Grid Grid.Row="0" Grid.ColumnSpan="3" Margin="0,0,0,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="80" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="60" />
-                                <ColumnDefinition Width="60" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="Tag" FontWeight="SemiBold" />
-                            <TextBlock Grid.Column="1" Text="Maps To" FontWeight="SemiBold" />
-                            <TextBlock Grid.Column="2" Text="Custom" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                            <TextBlock Grid.Column="3" Text="Enabled" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                        </Grid>
-
-                        <!-- Tags list -->
-                        <ListBox Grid.Row="1" Grid.Column="0"
-                                 x:Name="CustomTagsListBox"
+                        <ListBox x:Name="CustomTagsListBox" MinHeight="72" MaxHeight="176"
                                  SelectionChanged="CustomTagsListBox_SelectionChanged">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
-                                    <Grid>
+                                    <Grid Margin="2">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="80" />
+                                            <ColumnDefinition Width="120" />
                                             <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="60" />
-                                            <ColumnDefinition Width="60" />
+                                            <ColumnDefinition Width="70" />
                                         </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{Binding Tag}" VerticalAlignment="Center" />
-                                        <ComboBox Grid.Column="1" 
+                                        <TextBlock Text="{Binding Tag}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                        <ComboBox Grid.Column="1" Margin="4,1"
                                                   SelectedValue="{Binding MappedType, Mode=TwoWay}"
-                                                  SelectedValuePath="Tag"
-                                                  VerticalAlignment="Center">
-                                            <ComboBoxItem Content="Critical" Tag="Critical" />
-                                            <ComboBoxItem Content="Warning" Tag="Warning" />
-                                            <ComboBoxItem Content="Ideas" Tag="Ideas" />
-                                            <ComboBoxItem Content="Info" Tag="Info" />
+                                                  SelectedValuePath="Tag">
+                                            <ComboBoxItem Content="Критическая" Tag="{x:Static comments:CommentType.Critical}" />
+                                            <ComboBoxItem Content="Предупреждение" Tag="{x:Static comments:CommentType.Warning}" />
+                                            <ComboBoxItem Content="Задача или идея" Tag="{x:Static comments:CommentType.Ideas}" />
+                                            <ComboBoxItem Content="Информация" Tag="{x:Static comments:CommentType.Info}" />
                                         </ComboBox>
-                                        <CheckBox Grid.Column="2" 
-                                                  IsChecked="{Binding UseCustomColor, Mode=TwoWay}"
-                                                  HorizontalAlignment="Center" />
-                                        <CheckBox Grid.Column="3" 
-                                                  IsChecked="{Binding Enabled, Mode=TwoWay}"
-                                                  HorizontalAlignment="Center" />
+                                        <CheckBox Grid.Column="2" Content="Включена" Margin="8,0,0,0"
+                                                  VerticalAlignment="Center" IsChecked="{Binding Enabled, Mode=TwoWay}" />
                                     </Grid>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="3" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                </Style>
+                            </ListBox.ItemContainerStyle>
                         </ListBox>
-
-                        <!-- Add/Remove buttons -->
-                        <StackPanel Grid.Row="1" Grid.Column="2" VerticalAlignment="Top">
-                            <Button Content="+" Width="24" Height="24" Margin="0,0,0,4"
-                                    Click="AddCustomTag_Click" />
-                            <Button Content="-" Width="24" Height="24"
-                                    Click="RemoveCustomTag_Click" />
+                        <StackPanel Grid.Column="2">
+                            <TextBox x:Name="NewTagTextBox" MaxLength="24" Margin="0,0,0,6"
+                                     ToolTip="Используйте латинские буквы, цифры и подчёркивание."
+                                     KeyDown="NewTagTextBox_KeyDown" />
+                            <Button Content="Добавить метку" Click="AddCustomTag_Click" Margin="0,0,0,6" />
+                            <Button x:Name="RemoveCustomTagButton" Content="Удалить выбранную"
+                                    Click="RemoveCustomTag_Click" IsEnabled="False" />
                         </StackPanel>
                     </Grid>
-
-                    <!-- Add new tag -->
-                    <Grid Margin="0,4,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="80" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBox Grid.Column="0" x:Name="NewTagTextBox" 
-                                 Margin="0,0,8,0" VerticalAlignment="Center"
-                                 MaxLength="20" />
-                        <TextBlock Grid.Column="1" Text="Tag name (e.g., REVIEW)" 
-                                   VerticalAlignment="Center" Foreground="Gray" />
-                    </Grid>
+                    <TextBlock x:Name="TagValidationText" Margin="0,6,0,0" Foreground="#FFD64A4A"
+                               TextWrapping="Wrap" Visibility="Collapsed" />
+                    <TextBlock Margin="0,8,0,0" Foreground="Gray" TextWrapping="Wrap"
+                               Text="Цвета категорий меняются в Средства → Параметры → Среда → Шрифты и цвета." />
                 </StackPanel>
             </GroupBox>
-
         </StackPanel>
     </ScrollViewer>
 </UserControl>

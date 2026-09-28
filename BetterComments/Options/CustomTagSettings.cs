@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
 
 namespace BetterComments.Options
@@ -24,7 +25,25 @@ namespace BetterComments.Options
 
         public CustomTagSettings()
         {
-            customTags.CollectionChanged += (s, e) => TagsChanged?.Invoke();
+            customTags.CollectionChanged += OnCollectionChanged;
+        }
+
+        private void OnCollectionChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            if (e.OldItems != null)
+                foreach (CustomTagDefinition definition in e.OldItems)
+                    definition.PropertyChanged -= OnDefinitionChanged;
+
+            if (e.NewItems != null)
+                foreach (CustomTagDefinition definition in e.NewItems)
+                    definition.PropertyChanged += OnDefinitionChanged;
+
+            TagsChanged?.Invoke();
+        }
+
+        private void OnDefinitionChanged(object sender, PropertyChangedEventArgs e)
+        {
+            TagsChanged?.Invoke();
         }
 
         /// <summary>

@@ -36,7 +36,13 @@ namespace BetterComments.CommentsTagging
         // Custom tags regex (built dynamically)
         private static Regex customTagRegex;
         private static readonly object regexLock = new object();
-        private static List<CustomTagDefinition> currentCustomTags = new List<CustomTagDefinition>();
+        private sealed class MatchTag
+        {
+            public string Tag { get; set; }
+            public CommentType MappedType { get; set; }
+        }
+
+        private static MatchTag[] currentCustomTags = new MatchTag[0];
 
         /// <summary>
         /// Updates the custom tags used for matching.
@@ -44,18 +50,23 @@ namespace BetterComments.CommentsTagging
         /// </summary>
         public static void UpdateCustomTags(IEnumerable<CustomTagDefinition> customTags)
         {
-            var tags = customTags?.Where(t => t.Enabled).ToList() ?? new List<CustomTagDefinition>();
+            var tags = customTags?.Where(t => t != null && t.Enabled && !string.IsNullOrWhiteSpace(t.Tag))
+                .Select(t => new MatchTag { Tag = t.Tag, MappedType = t.MappedType })
+                .ToArray() ?? new MatchTag[0];
 
             lock (regexLock)
             {
-                if (tags.SequenceEqual(currentCustomTags, new CustomTagComparer()))
+                if (tags.Length == currentCustomTags.Length
+                    && tags.Zip(currentCustomTags, (left, right) =>
+                        string.Equals(left.Tag, right.Tag, StringComparison.OrdinalIgnoreCase)
+                        && left.MappedType == right.MappedType).All(equal => equal))
                     return;
 
                 currentCustomTags = tags;
 
-                if (tags.Count > 0)
+                if (tags.Length > 0)
                 {
-                    var tagAlternation = string.Join("|", tags.Select(t => Regex.Escape(t.Tag)));
+                    var tagAlternation = string.Join("|", tags.OrderByDescending(t => t.Tag.Length).Select(t => Regex.Escape(t.Tag)));
                     var pattern = $@"(^|[^\w])({tagAlternation})\s*(\([^\r\n)]*\))?\s*:";
                     customTagRegex = new Regex(pattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
                 }
@@ -118,7 +129,7 @@ namespace BetterComments.CommentsTagging
         private static TokenMatchResult MatchCustomTags(string text)
         {
             Regex regex;
-            List<CustomTagDefinition> tags;
+            MatchTag[] tags;
 
             lock (regexLock)
             {
@@ -126,7 +137,7 @@ namespace BetterComments.CommentsTagging
                 tags = currentCustomTags;
             }
 
-            if (regex == null || tags.Count == 0)
+            if (regex == null || tags.Length == 0)
                 return TokenMatchResult.Normal;
 
             var match = regex.Match(text);
@@ -143,24 +154,6 @@ namespace BetterComments.CommentsTagging
             int index = match.Index + match.Groups[1].Length;
             string token = text.Substring(index, match.Length - (index - match.Index));
             return new TokenMatchResult(customTag.MappedType, index, token, matchedTag);
-        }
-
-        private class CustomTagComparer : IEqualityComparer<CustomTagDefinition>
-        {
-            public bool Equals(CustomTagDefinition x, CustomTagDefinition y)
-            {
-                if (ReferenceEquals(x, y)) return true;
-                if (x is null || y is null) return false;
-                return string.Equals(x.Tag, y.Tag, StringComparison.OrdinalIgnoreCase)
-                    && x.MappedType == y.MappedType
-                    && x.UseCustomColor == y.UseCustomColor
-                    && x.Enabled == y.Enabled;
-            }
-
-            public int GetHashCode(CustomTagDefinition obj)
-            {
-                return obj?.Tag?.ToUpperInvariant().GetHashCode() ?? 0;
-            }
         }
     }
 }

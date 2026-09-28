@@ -6,7 +6,7 @@
 
 - **Multi-line Support:** Highlight entire blocks of code in `/* ... */`, `<!-- ... -->`, or `(* ... *)`.
 - **VSCode-Style Parsing:** Uses the same tag detection logic as VSCode (supports tags anywhere in the line, with optional parameters).
-- **Custom Tags:** Define your own comment tags with custom colors or map them to existing types.
+- **Custom Tags:** Define your own comment tags and map them to a built-in category.
 - **Wide Language Support:** C#, C++, JavaScript, TypeScript, Python, F#, VB, Markup (HTML/XML), Rust, and Go.
 - **Deduplicated Rendering:** Optimized to prevent overlapping tags and flickering in the editor.
 
@@ -54,7 +54,7 @@ For each comment type (Critical, Warning, Ideas, Info):
 - **Highlight keyword only:** Show only the tag keyword, not the entire comment.
 
 ### Custom Tags
-Add your own tags that map to existing types or use custom colors.
+Add your own tags and choose which built-in category they use. Tags are saved with the rest of the extension settings.
 
 ### Colors & Styling
 To customize the colors of each category:
